@@ -31,6 +31,11 @@ import {
   ExternalLink,
   FileText,
   AlertCircle,
+  Globe,
+  ShieldAlert,
+  Settings,
+  Link,
+  Check,
 } from 'lucide-react';
 import { RecordingSession } from '../../types/session';
 import { probeAudioFile, createImportedSession, AudioValidationError } from '../../services/audio/audioFileService';
@@ -42,6 +47,8 @@ import {
   mapRetryResponseToInsights,
   BackendApiError,
   HealthResponse,
+  getBackendBaseUrl,
+  setBackendBaseUrl,
 } from '../../services/ai/backendApiService';
 import { localDb } from '../../services/storage/indexedDb';
 
@@ -116,6 +123,37 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
   const [ollamaModel, setOllamaModel] = useState<string>('');
   const [isRetrying, setIsRetrying] = useState(false);
   const [charsProcessed, setCharsProcessed] = useState<number | null>(null);
+  const [backendUrl, setBackendUrl] = useState<string>(() => getBackendBaseUrl());
+  const [customUrlInput, setCustomUrlInput] = useState<string>(() => getBackendBaseUrl());
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [urlSavedNotice, setUrlSavedNotice] = useState(false);
+
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const isHttpBackend = backendUrl.startsWith('http://');
+  const isMixedContentRisk = isHttps && isHttpBackend;
+
+  const handleSaveUrl = useCallback((newUrl: string) => {
+    setBackendBaseUrl(newUrl);
+    const updated = getBackendBaseUrl();
+    setBackendUrl(updated);
+    setCustomUrlInput(updated);
+    setIsEditingUrl(false);
+    setUrlSavedNotice(true);
+    setTimeout(() => setUrlSavedNotice(false), 3000);
+    checkBackendHealth()
+      .then((h) => {
+        setHealth(h);
+        setErrorMessage(null);
+        setStep('idle');
+      })
+      .catch((err) => {
+        setHealth(null);
+        setErrorMessage(
+          err instanceof BackendApiError ? err.detail : 'Cannot reach backend at ' + updated
+        );
+        setStep('failed');
+      });
+  }, []);
 
   const isProcessing = ['checking_backend', 'validating', 'uploading', 'transcribing', 'summarizing', 'saving'].includes(step);
 
@@ -352,6 +390,98 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
           Upload an audio file to transcribe it with Faster-Whisper and generate structured insights using Ollama — entirely on your local machine.
         </p>
       </div>
+
+      {/* ── HTTPS Mixed-Content Notice Banner ── */}
+      {isMixedContentRisk && (
+        <div style={{
+          background: 'rgba(254, 243, 199, 0.85)',
+          border: '1.5px solid #fde68a',
+          borderRadius: 16,
+          padding: '14px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          fontSize: '0.82rem',
+          color: '#92400e',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
+            <ShieldAlert size={20} color="#d97706" style={{ flexShrink: 0 }} />
+            <div style={{ lineHeight: 1.5 }}>
+              <strong>Running on Vercel (HTTPS):</strong> Web browsers block secure HTTPS pages from accessing plain HTTP localhost.
+              To process audio with your local Faster-Whisper + Ollama backend, use your local app or allow insecure content.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <a
+              href="http://localhost:5173"
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-forest"
+              style={{ padding: '7px 14px', fontSize: '0.78rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}
+            >
+              <ExternalLink size={13} /> Open Local App (5173)
+            </a>
+            <button
+              onClick={() => setIsEditingUrl(!isEditingUrl)}
+              className="btn btn-secondary"
+              style={{ padding: '7px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 5 }}
+            >
+              <Settings size={13} /> {isEditingUrl ? 'Close Config' : 'Configure URL'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Backend URL Configuration ── */}
+      {isEditingUrl && (
+        <div className="white-card" style={{ padding: '18px 22px', border: '1.5px solid var(--accent-emerald)' }}>
+          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link size={16} color="var(--accent-emerald)" /> AI Backend Endpoint Configuration
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+            Active endpoint: <code style={{ fontFamily: 'monospace', fontWeight: 600 }}>{backendUrl}</code>.
+            If accessing via HTTPS, you can use a tunnel address (e.g., Cloudflare Tunnel / ngrok) to bypass browser mixed-content restrictions.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={customUrlInput}
+              onChange={(e) => setCustomUrlInput(e.target.value)}
+              placeholder="e.g. http://127.0.0.1:8787 or https://your-tunnel.trycloudflare.com"
+              style={{
+                flex: 1,
+                minWidth: 260,
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #d1d5db',
+                fontSize: '0.84rem',
+                fontFamily: 'monospace',
+              }}
+            />
+            <button
+              onClick={() => handleSaveUrl(customUrlInput)}
+              className="btn btn-forest"
+              style={{ padding: '8px 18px', fontSize: '0.82rem' }}
+            >
+              Save & Test Connection
+            </button>
+            <button
+              onClick={() => handleSaveUrl('http://127.0.0.1:8787')}
+              className="btn btn-secondary"
+              style={{ padding: '8px 14px', fontSize: '0.82rem' }}
+            >
+              Reset to 127.0.0.1:8787
+            </button>
+          </div>
+          {urlSavedNotice && (
+            <div style={{ fontSize: '0.76rem', color: 'var(--accent-forest)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Check size={14} color="var(--accent-emerald)" /> Endpoint saved to local storage and tested!
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Backend Status Card ── */}
       {health && (
@@ -903,11 +1033,146 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <XCircle size={24} color="#e11d48" style={{ flexShrink: 0 }} />
-            <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#9f1239' }}>Analysis Failed</h4>
+            <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#9f1239' }}>Analysis Failed</h4>
           </div>
           <p style={{ fontSize: '0.86rem', color: '#7f1d1d', lineHeight: 1.6, marginBottom: 20 }}>
             {errorMessage}
           </p>
+
+          {/* Special Resolution Box when running on HTTPS / Vercel */}
+          {isMixedContentRisk && (
+            <div style={{
+              background: '#ffffff',
+              border: '1.5px solid #fed7aa',
+              borderRadius: 16,
+              padding: '22px 24px',
+              marginBottom: 24,
+              boxShadow: '0 4px 14px rgba(234, 88, 12, 0.08)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <ShieldAlert size={22} color="#ea580c" />
+                <h5 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#9a3412', margin: 0 }}>
+                  Why this happens on Vercel (HTTPS) & How to solve it:
+                </h5>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#7c2d12', lineHeight: 1.6, marginBottom: 18 }}>
+                Your local backend is listening on unencrypted <strong>HTTP</strong> (<code style={{ fontFamily: 'monospace', background: '#ffedd5', padding: '1px 6px', borderRadius: 4 }}>http://127.0.0.1:8787</code>), but this site is loaded securely over <strong>HTTPS</strong> on Vercel. Web browsers (including Brave Shields and Chrome) block HTTPS pages from requesting plain HTTP localhost addresses due to <em>Mixed Content</em> and <em>Private Network Access</em> security rules.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                {/* Option 1 */}
+                <div style={{
+                  background: '#f0fdf4',
+                  border: '1.5px solid #bbf7d0',
+                  borderRadius: 12,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#166534', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <CheckCircle2 size={16} color="#16a34a" /> Option 1 (Recommended): Open Local App
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: '#14532d', lineHeight: 1.5, marginBottom: 14 }}>
+                      Open your local Vite development frontend at <strong>http://localhost:5173</strong>. Since both frontend and backend are local HTTP, all browser blocks are bypassed and Faster-Whisper + Ollama work immediately.
+                    </p>
+                  </div>
+                  <a
+                    href="http://localhost:5173"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-forest"
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '0.82rem',
+                      textDecoration: 'none',
+                      textAlign: 'center',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <ExternalLink size={14} /> Open http://localhost:5173
+                  </a>
+                </div>
+
+                {/* Option 2 */}
+                <div style={{
+                  background: '#fffbeb',
+                  border: '1.5px solid #fde68a',
+                  borderRadius: 12,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#92400e', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ShieldAlert size={16} color="#d97706" /> Option 2: Allow Insecure Content in Browser
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#78350f', lineHeight: 1.5, marginBottom: 14 }}>
+                      1. In Brave, click the <strong>Lion icon (Shields)</strong> in your URL bar → toggle Shields <strong>OFF</strong>.<br />
+                      2. Click the <strong>Tune / Lock</strong> icon next to the URL → <strong>Site settings</strong> → set <strong>Insecure content</strong> to <strong>Allow</strong>.<br />
+                      3. Click <em>Retry Connection</em> below.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => checkHealth()}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    <RefreshCw size={14} /> Retry Connection
+                  </button>
+                </div>
+
+                {/* Option 3 */}
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: 12,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#334155', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Globe size={16} color="#64748b" /> Option 3: Free HTTPS Tunnel
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: '#475569', lineHeight: 1.5, marginBottom: 10 }}>
+                      Run in terminal: <code style={{ fontFamily: 'monospace', background: '#e2e8f0', padding: '1px 5px', borderRadius: 4 }}>npx -y cloudflared tunnel --url http://127.0.0.1:8787</code>
+                      <br />Then paste the generated <code>https://...</code> URL below:
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="text"
+                      value={customUrlInput}
+                      onChange={(e) => setCustomUrlInput(e.target.value)}
+                      placeholder="https://...trycloudflare.com"
+                      style={{
+                        flex: 1,
+                        padding: '6px 10px',
+                        fontSize: '0.78rem',
+                        borderRadius: 6,
+                        border: '1px solid #cbd5e1',
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                    <button
+                      onClick={() => handleSaveUrl(customUrlInput)}
+                      className="btn btn-forest"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', flexShrink: 0 }}
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Show retry summarization option if transcription succeeded before failure */}
           {savedTranscriptText && (
@@ -939,6 +1204,9 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
           )}
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => checkHealth()} className="btn btn-forest" style={{ padding: '9px 20px', fontSize: '0.84rem' }}>
+              <RefreshCw size={14} /> Test Backend Connection
+            </button>
             {selectedFile && step === 'failed' && (
               <button onClick={startAnalysis} className="btn btn-secondary" style={{ padding: '9px 20px', fontSize: '0.84rem' }}>
                 <RefreshCw size={14} /> Retry Full Analysis
@@ -949,8 +1217,8 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
             </button>
           </div>
 
-          {/* Setup hint when backend is unreachable */}
-          {errorMessage?.includes('backend') && (
+          {/* Setup hint when backend is unreachable on localhost */}
+          {!isMixedContentRisk && errorMessage?.includes('backend') && (
             <div style={{ marginTop: 20, fontSize: '0.78rem', color: '#7f1d1d', lineHeight: 1.6 }}>
               <strong>Quick setup:</strong>
               <ol style={{ paddingLeft: 20, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>

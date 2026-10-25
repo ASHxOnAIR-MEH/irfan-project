@@ -7,9 +7,29 @@
  * All data stays local. No cloud APIs are used.
  */
 
-export const BACKEND_BASE_URL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) ||
-  'http://127.0.0.1:8787';
+export function getBackendBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('ambient_backend_url');
+    if (custom) return custom.replace(/\/+$/, '');
+  }
+  return (
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) ||
+    'http://127.0.0.1:8787'
+  );
+}
+
+export function setBackendBaseUrl(url: string): void {
+  if (typeof window !== 'undefined') {
+    const trimmed = url.trim();
+    if (trimmed) {
+      localStorage.setItem('ambient_backend_url', trimmed.replace(/\/+$/, ''));
+    } else {
+      localStorage.removeItem('ambient_backend_url');
+    }
+  }
+}
+
+export const BACKEND_BASE_URL = getBackendBaseUrl();
 
 // ─── Response Type Definitions ────────────────────────────────────────────────
 
@@ -120,18 +140,24 @@ export class BackendApiError extends Error {
  * Throws BackendApiError if the backend is not reachable.
  */
 export async function checkBackendHealth(): Promise<HealthResponse> {
+  const url = getBackendBaseUrl();
   let resp: Response;
   try {
-    resp = await fetch(`${BACKEND_BASE_URL}/health`, {
+    resp = await fetch(`${url}/health`, {
       method: 'GET',
       signal: AbortSignal.timeout(8000),
     });
   } catch {
-    throw new BackendApiError(
-      0,
-      'Cannot reach the local AI backend at ' + BACKEND_BASE_URL +
-        '. Make sure the backend server is running (see backend/README.md).'
-    );
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const isHttpBackend = url.startsWith('http://');
+    let message = 'Cannot reach the local AI backend at ' + url + '.';
+    if (isHttps && isHttpBackend) {
+      message +=
+        ' (Browser Mixed Content Security Block: This page is loaded over HTTPS, so your browser blocks connections to plain HTTP localhost. See the resolution options below.)';
+    } else {
+      message += ' Make sure the backend server is running (see backend/README.md).';
+    }
+    throw new BackendApiError(0, message);
   }
 
   if (!resp.ok) {
@@ -169,7 +195,7 @@ export async function analyzeAudioFile(
   return new Promise<AnalyzeAudioResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
-    xhr.open('POST', `${BACKEND_BASE_URL}/api/analyze-audio`);
+    xhr.open('POST', `${getBackendBaseUrl()}/api/analyze-audio`);
     xhr.timeout = 12 * 60 * 1000; // 12 minutes for large files + long transcription
 
     if (signal) {
@@ -228,7 +254,7 @@ export async function retrySummarization(
 ): Promise<RetrySummarizationResponse> {
   let resp: Response;
   try {
-    resp = await fetch(`${BACKEND_BASE_URL}/api/retry-summarization`, {
+    resp = await fetch(`${getBackendBaseUrl()}/api/retry-summarization`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ full_text: fullText, session_id: sessionId }),

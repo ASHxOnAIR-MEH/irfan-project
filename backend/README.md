@@ -207,6 +207,18 @@ This runs the 13-point test suite covering:
   python -m uvicorn main:app --host 127.0.0.1 --port 8787 --reload
   ```
 
+### 5. Accessing Backend from Vercel Deployment (Mixed Content & Private Network Access)
+When accessing the frontend hosted on Vercel (`https://*.vercel.app`), browsers block requests to `http://127.0.0.1:8787` by default because an HTTPS page cannot query plain HTTP localhost resources (Mixed Content Policy and Brave/Chrome Private Network Access restrictions).
+
+**Resolution options:**
+1. **Recommended**: Run and open the local frontend at `http://localhost:5173` via `npm run dev`. Both frontend and backend are local HTTP, bypassing all restrictions.
+2. **In Brave / Chrome**:
+   - Turn off Brave Shields for the Vercel site.
+   - In browser settings for the site, set **Insecure content** to **Allow**.
+3. **HTTPS Tunnel**:
+   - Run `npx -y cloudflared tunnel --url http://127.0.0.1:8787` in a terminal.
+   - Enter the generated `https://...` address in the app's backend URL settings.
+
 ---
 
 ## Interactive API Documentation
