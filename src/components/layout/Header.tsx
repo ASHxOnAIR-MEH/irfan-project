@@ -71,6 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'dashboard', label: 'Home' },
     { id: 'device', label: 'Device' },
     { id: 'sessions', label: 'Recordings' },
+    { id: 'analyze', label: 'AI Analyze' },
     { id: 'insights', label: 'Insights' },
     { id: 'actions', label: 'Tasks' },
     { id: 'settings', label: 'Settings' },

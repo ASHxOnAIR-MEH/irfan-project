@@ -18,6 +18,7 @@ import { DeviceConnectionView } from './components/device/DeviceConnectionView';
 import { TransferModal } from './components/sync/TransferModal';
 import { MockHardwareControls } from './components/simulator/MockHardwareControls';
 import { GlobalInsightsView } from './components/insights/GlobalInsightsView';
+import { UploadAnalyzeView } from './components/analyze/UploadAnalyzeView';
 import { Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -251,6 +252,12 @@ export const App: React.FC = () => {
     handleSelectSession(newSession);
   };
 
+  // Callback when the AI analysis pipeline completes a session
+  const handleAnalyzedSessionReady = async (session: RecordingSession) => {
+    await refreshSessions();
+    handleSelectSession(session);
+  };
+
   // Clear all data
   const handleClearAll = async () => {
     await localDb.clearAll();
@@ -314,6 +321,7 @@ export const App: React.FC = () => {
                 onSelectSession={handleSelectSession}
                 onSyncSession={handleSyncSession}
                 onViewAllSessions={() => setActiveTab('sessions')}
+                onNavigateToAnalyze={() => setActiveTab('analyze')}
               />
             )}
 
@@ -361,6 +369,11 @@ export const App: React.FC = () => {
                 onReimportAudio={handleReimportAudioForSession}
                 onDeleteSession={handleDeleteSession}
               />
+            )}
+
+            {/* Tab: AI Upload & Analyze */}
+            {activeTab === 'analyze' && (
+              <UploadAnalyzeView onSessionReady={handleAnalyzedSessionReady} />
             )}
 
             {/* Tab: Global Insights & Topic Browser */}

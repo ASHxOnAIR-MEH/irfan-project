@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Radio, Mic2, Sparkles, CheckSquare, Settings2 } from 'lucide-react';
+import { LayoutDashboard, Radio, Mic2, Sparkles, CheckSquare, Settings2, Brain } from 'lucide-react';
 
 interface NavigationProps {
   activeTab: string;
@@ -16,6 +16,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'device', label: 'Device', icon: Radio },
     { id: 'sessions', label: 'Recordings', icon: Mic2, badge: pendingSyncCount > 0 ? pendingSyncCount : null },
+    { id: 'analyze', label: 'AI Analyze', icon: Brain },
     { id: 'insights', label: 'Insights', icon: Sparkles },
     { id: 'actions', label: 'Tasks', icon: CheckSquare },
     { id: 'settings', label: 'Settings', icon: Settings2 },

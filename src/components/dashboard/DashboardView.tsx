@@ -11,7 +11,9 @@ import {
   Pause, 
   ShieldCheck, 
   Sparkles, 
-  Volume2
+  Volume2,
+  Brain,
+  Upload
 } from 'lucide-react';
 import { PendantDeviceStatus } from '../../types/device';
 import { SyncManifestItem } from '../../types/protocol';
@@ -25,6 +27,7 @@ interface DashboardViewProps {
   onSelectSession: (session: RecordingSession) => void;
   onSyncSession: (item: SyncManifestItem) => void;
   onViewAllSessions: () => void;
+  onNavigateToAnalyze?: () => void;
 }
 
 function formatDuration(seconds: number): string {
@@ -49,6 +52,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectSession,
   onSyncSession,
   onViewAllSessions,
+  onNavigateToAnalyze,
 }) => {
   const isRecording = status.operatingMode === 'recording';
   const isPaused = status.operatingMode === 'paused';
@@ -174,6 +178,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Explore Library</span>
               <ArrowRight size={15} />
             </button>
+
+            {onNavigateToAnalyze && (
+              <button
+                onClick={onNavigateToAnalyze}
+                className="btn btn-secondary"
+                style={{ padding: '12px 22px', fontSize: '0.94rem', borderColor: 'var(--accent-emerald)', color: 'var(--accent-forest)' }}
+              >
+                <Brain size={15} />
+                <span>AI Analyze</span>
+              </button>
+            )}
           </div>
 
           {/* Micro Telemetry Bar under Hero CTA */}
