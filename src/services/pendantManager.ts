@@ -10,17 +10,14 @@ import { RecordingSession } from '../types/session';
 import { calculateCrc32 } from '../utils/crc32';
 import { IAIProcessingService } from './ai/IAIProcessingService';
 import { MockAIProcessor } from './ai/mockAIProcessor';
+import { IPendantService, SessionsUpdatedListener, StatusListener, TransferListener } from './IPendantService';
 import { localDb } from './storage/indexedDb';
 import { ITransport } from './transport/ITransport';
 import { MockTransport } from './transport/MockTransport';
 import { WebBleTransport } from './transport/WebBleTransport';
 import { WifiHttpTransport } from './transport/WifiHttpTransport';
 
-export type StatusListener = (status: PendantDeviceStatus) => void;
-export type TransferListener = (state: TransferState | null) => void;
-export type SessionsUpdatedListener = () => void;
-
-class PendantManager {
+class PendantManager implements IPendantService {
   private activeTransport: ITransport;
   private mockTransportInstance: MockTransport;
   private bleTransportInstance: WebBleTransport;
@@ -138,10 +135,30 @@ class PendantManager {
     return this.activeTransport.startRecording();
   }
 
+  public async pauseRecording(): Promise<boolean> {
+    if (this.activeTransport.pauseRecording) {
+      return this.activeTransport.pauseRecording();
+    }
+    return false;
+  }
+
+  public async resumeRecording(): Promise<boolean> {
+    if (this.activeTransport.resumeRecording) {
+      return this.activeTransport.resumeRecording();
+    }
+    return false;
+  }
+
   public async stopRecording(): Promise<string | null> {
     const recId = await this.activeTransport.stopRecording();
     this.notifySessionsUpdated();
     return recId;
+  }
+
+  public simulateConnectionError(errorMessage: string = 'Simulated connection failure (Timeout / Bluetooth dropped)'): void {
+    if (this.mockTransportInstance.simulateConnectionError) {
+      this.mockTransportInstance.simulateConnectionError(errorMessage);
+    }
   }
 
   public async setPrivacyMute(enabled: boolean): Promise<boolean> {

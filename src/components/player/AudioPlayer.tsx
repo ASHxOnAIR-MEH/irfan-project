@@ -7,7 +7,8 @@ import {
   Volume2, 
   VolumeX, 
   Activity, 
-  Gauge
+  Gauge,
+  AlertCircle
 } from 'lucide-react';
 import { AudioMetadata } from '../../types/session';
 
@@ -37,7 +38,6 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Sync seekTargetMs if external component clicked a transcript timestamp
   useEffect(() => {
     if (seekTargetMs !== undefined && seekTargetMs !== null && audioRef.current) {
       const targetSec = seekTargetMs / 1000;
@@ -109,22 +109,18 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   };
 
   const progressPercent = durationSec > 0 ? (currentTimeSec / durationSec) * 100 : 0;
-
-  // Waveform bars simulation based on metadata
   const barCount = 48;
 
   return (
     <div 
-      className="glass-card"
+      className="white-card"
       style={{
-        padding: 20,
-        background: 'linear-gradient(145deg, rgba(16, 23, 38, 0.85) 0%, rgba(9, 14, 24, 0.95) 100%)',
-        border: '1px solid var(--border-card)',
+        padding: 24,
         marginBottom: 20,
       }}
     >
       {/* Hidden audio element */}
-      {audioBlobUrl && (
+      {audioBlobUrl ? (
         <audio
           ref={audioRef}
           src={audioBlobUrl}
@@ -132,20 +128,36 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           onLoadedMetadata={handleLoadedMetadata}
           onEnded={() => setIsPlaying(false)}
         />
+      ) : (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          color: '#92400e',
+          padding: '10px 16px',
+          borderRadius: '12px',
+          marginBottom: 16,
+          fontSize: '0.84rem',
+        }}>
+          <AlertCircle size={16} />
+          <span>Audio blob not available in browser IndexedDB cache. Metadata and transcripts preserved.</span>
+        </div>
       )}
 
       {/* Waveform Scrubber Visual */}
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 16 }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 2,
-          height: 48,
-          padding: '0 8px',
-          background: 'rgba(0, 0, 0, 0.3)',
-          borderRadius: 8,
-          border: '1px solid var(--border-subtle)',
+          height: 52,
+          padding: '0 10px',
+          background: '#eefaf3',
+          borderRadius: '12px',
+          border: '1.5px solid var(--border-card)',
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -153,9 +165,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           {Array.from({ length: barCount }).map((_, idx) => {
             const barFraction = idx / barCount;
             const isPlayed = barFraction <= (progressPercent / 100);
-            // Deterministic waveform pattern
             const heightMultiplier = 0.25 + 0.75 * Math.abs(Math.sin((idx * 0.45) + (metadata.durationSeconds * 0.1)));
-            const barHeight = Math.max(8, Math.round(heightMultiplier * 38));
+            const barHeight = Math.max(8, Math.round(heightMultiplier * 40));
 
             return (
               <div
@@ -164,39 +175,45 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
                   flex: 1,
                   height: barHeight,
                   borderRadius: 2,
-                  background: isPlayed ? 'var(--accent-cyan)' : 'rgba(255, 255, 255, 0.12)',
-                  boxShadow: isPlayed && isPlaying ? '0 0 6px rgba(0, 242, 254, 0.4)' : 'none',
-                  transition: 'background 0.1s ease',
+                  background: isPlayed ? 'var(--accent-emerald)' : '#bce3cf',
+                  transition: 'background-color 0.1s ease',
                 }}
               />
             );
           })}
+
+          {/* Invisible Range Input for Scrubbing */}
+          <input
+            type="range"
+            min={0}
+            max={durationSec}
+            step={0.01}
+            value={currentTimeSec}
+            onChange={handleSeek}
+            disabled={!audioBlobUrl}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0,
+              cursor: audioBlobUrl ? 'pointer' : 'default',
+              margin: 0,
+            }}
+          />
         </div>
 
-        {/* Range Slider for Scrubbing */}
-        <input
-          type="range"
-          min={0}
-          max={durationSec || 1}
-          step={0.1}
-          value={currentTimeSec}
-          onChange={handleSeek}
-          style={{
-            width: '100%',
-            marginTop: 8,
-            accentColor: 'var(--accent-cyan)',
-            cursor: 'pointer',
-          }}
-        />
-
-        {/* Time Labels */}
+        {/* Timestamps */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
-          fontSize: '0.78rem',
-          color: 'var(--text-secondary)',
+          fontSize: '0.76rem',
+          color: 'var(--text-muted)',
           fontFamily: 'var(--font-mono)',
-          marginTop: 4,
+          fontWeight: 600,
+          marginTop: 6,
+          padding: '0 4px',
         }}>
           <span>{formatDuration(currentTimeSec)}</span>
           <span>{formatDuration(durationSec)}</span>
@@ -212,46 +229,50 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         gap: 12,
       }}>
         {/* Left: Metadata badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="badge badge-cyan" style={{ fontSize: '0.7rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="badge badge-emerald" style={{ fontSize: '0.72rem' }}>
             <Activity size={12} /> {metadata.sampleRateHz / 1000} kHz {metadata.format.toUpperCase()}
           </span>
-          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
             {(metadata.fileSizeBytes / 1024).toFixed(0)} KB
           </span>
         </div>
 
         {/* Center: Main Transport Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => skipSeconds(-5)}
+            disabled={!audioBlobUrl}
             className="btn btn-secondary"
             title="Rewind 5 seconds"
-            style={{ width: 36, height: 36, padding: 0, borderRadius: '50%' }}
+            style={{ width: 38, height: 38, padding: 0, borderRadius: '50%' }}
           >
             <RotateCcw size={15} />
           </button>
 
           <button
             onClick={togglePlay}
-            className="btn btn-primary"
+            disabled={!audioBlobUrl}
+            className="btn btn-forest"
             title={isPlaying ? 'Pause' : 'Play'}
             style={{
-              width: 48,
-              height: 48,
+              width: 50,
+              height: 50,
               padding: 0,
               borderRadius: '50%',
-              boxShadow: 'var(--shadow-glow-cyan)',
+              boxShadow: '0 4px 18px rgba(5, 41, 30, 0.25)',
+              opacity: audioBlobUrl ? 1 : 0.5,
             }}
           >
-            {isPlaying ? <Pause size={22} color="#06080d" /> : <Play size={22} color="#06080d" style={{ marginLeft: 3 }} />}
+            {isPlaying ? <Pause size={22} color="#ffffff" /> : <Play size={22} color="#ffffff" style={{ marginLeft: 3 }} />}
           </button>
 
           <button
             onClick={() => skipSeconds(5)}
+            disabled={!audioBlobUrl}
             className="btn btn-secondary"
             title="Forward 5 seconds"
-            style={{ width: 36, height: 36, padding: 0, borderRadius: '50%' }}
+            style={{ width: 38, height: 38, padding: 0, borderRadius: '50%' }}
           >
             <RotateCw size={15} />
           </button>
@@ -261,18 +282,20 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={cycleSpeed}
+            disabled={!audioBlobUrl}
             className="btn btn-secondary"
             title="Cycle Playback Speed"
-            style={{ padding: '6px 10px', fontSize: '0.76rem', fontFamily: 'var(--font-mono)' }}
+            style={{ padding: '6px 12px', fontSize: '0.78rem', fontFamily: 'var(--font-mono)' }}
           >
             <Gauge size={13} /> {playbackRate}x
           </button>
 
           <button
             onClick={toggleMute}
+            disabled={!audioBlobUrl}
             className="btn btn-secondary"
             title={isMuted ? 'Unmute' : 'Mute'}
-            style={{ width: 34, height: 34, padding: 0, borderRadius: '50%' }}
+            style={{ width: 36, height: 36, padding: 0, borderRadius: '50%' }}
           >
             {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
           </button>

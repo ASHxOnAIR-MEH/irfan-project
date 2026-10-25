@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
 import { 
   Search, 
-  Filter, 
   Star, 
   Trash2, 
   Play, 
   FileAudio, 
   ArrowDownCircle, 
   CheckCircle2, 
-  Clock, 
-  Sparkles,
-  Tag
+  Tag,
+  ArrowUpDown
 } from 'lucide-react';
 import { RecordingSession } from '../../types/session';
 import { SyncManifestItem } from '../../types/protocol';
@@ -34,7 +32,6 @@ function formatDate(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -52,10 +49,13 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [filterFavorites, setFilterFavorites] = useState(false);
 
+  type SortOption = 'date_desc' | 'date_asc' | 'duration_desc' | 'duration_asc' | 'title_asc';
+  const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+
   // Extract all unique tags
   const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || [])));
 
-  // Filtered sessions
+  // Filtered & Sorted sessions
   const filteredSessions = sessions.filter((s) => {
     if (filterFavorites && !s.isFavorite) return false;
     if (selectedTag && (!s.tags || !s.tags.includes(selectedTag))) return false;
@@ -70,30 +70,47 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
     return titleMatch || tagMatch || transcriptMatch || actionMatch;
   });
 
+  filteredSessions.sort((a, b) => {
+    switch (sortBy) {
+      case 'date_desc':
+        return b.capturedAtMs - a.capturedAtMs;
+      case 'date_asc':
+        return a.capturedAtMs - b.capturedAtMs;
+      case 'duration_desc':
+        return b.metadata.durationSeconds - a.metadata.durationSeconds;
+      case 'duration_asc':
+        return a.metadata.durationSeconds - b.metadata.durationSeconds;
+      case 'title_asc':
+        return a.title.localeCompare(b.title);
+      default:
+        return 0;
+    }
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Top Search & Filter Bar */}
       <div 
-        className="glass-card"
-        style={{ padding: 16 }}
+        className="white-card"
+        style={{ padding: 20 }}
       >
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {/* Search Input */}
           <div style={{
             flex: 1,
-            minWidth: 240,
+            minWidth: 260,
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            background: 'var(--bg-input)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '8px 14px',
+            background: '#f8faf9',
+            border: '1.5px solid var(--border-card)',
+            borderRadius: 'var(--radius-full)',
+            padding: '8px 16px',
           }}>
             <Search size={18} color="var(--text-muted)" />
             <input
               type="text"
-              placeholder="Search title, spoken words, topics, action items..."
+              placeholder="Search title, spoken words, topics, tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -115,6 +132,7 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
                   color: 'var(--text-muted)',
                   cursor: 'pointer',
                   fontSize: '0.8rem',
+                  fontWeight: 600,
                 }}
               >
                 Clear
@@ -125,28 +143,58 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
           {/* Favorites Filter Toggle */}
           <button
             onClick={() => setFilterFavorites(!filterFavorites)}
-            className={`btn ${filterFavorites ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '8px 14px' }}
+            className={`btn ${filterFavorites ? 'btn-forest' : 'btn-secondary'}`}
+            style={{ padding: '8px 16px' }}
           >
             <Star size={15} fill={filterFavorites ? 'currentColor' : 'none'} />
             <span>Favorites</span>
           </button>
+
+          {/* Sorting Dropdown */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#ffffff',
+            border: '1.5px solid var(--border-card)',
+            borderRadius: 'var(--radius-full)',
+            padding: '0 14px',
+            boxShadow: 'var(--shadow-sm)',
+          }}>
+            <ArrowUpDown size={14} color="var(--accent-forest)" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer',
+                padding: '10px 0',
+              }}
+            >
+              <option value="date_desc">Newest First</option>
+              <option value="date_asc">Oldest First</option>
+              <option value="duration_desc">Longest Duration</option>
+              <option value="duration_asc">Shortest Duration</option>
+              <option value="title_asc">Title (A-Z)</option>
+            </select>
+          </div>
         </div>
 
         {/* Tag Pills Filter */}
         {allTags.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Tag size={12} /> Tags:
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+            <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Tag size={13} /> Tags:
             </span>
             <button
               onClick={() => setSelectedTag(null)}
-              className={`badge ${selectedTag === null ? 'badge-cyan' : 'badge-secondary'}`}
-              style={{
-                cursor: 'pointer',
-                background: selectedTag === null ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid var(--border-subtle)',
-              }}
+              className={`badge ${selectedTag === null ? 'badge-forest' : 'badge-secondary'}`}
+              style={{ cursor: 'pointer' }}
             >
               All
             </button>
@@ -154,12 +202,9 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
               <button
                 key={tag}
                 onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                className="badge"
+                className={`badge ${selectedTag === tag ? 'badge-forest' : 'badge-emerald'}`}
                 style={{
                   cursor: 'pointer',
-                  background: selectedTag === tag ? 'rgba(0, 242, 254, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                  borderColor: selectedTag === tag ? 'var(--accent-cyan)' : 'var(--border-subtle)',
-                  color: selectedTag === tag ? 'var(--accent-cyan)' : 'var(--text-secondary)',
                   textTransform: 'none',
                 }}
               >
@@ -173,30 +218,30 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
       {/* Pending MicroSD Sync Banner (if items waiting) */}
       {pendingManifest.length > 0 && (
         <div style={{
-          background: 'rgba(245, 158, 11, 0.06)',
-          border: '1px solid rgba(245, 158, 11, 0.25)',
-          borderRadius: 12,
-          padding: 14,
+          background: '#fffbeb',
+          border: '1.5px solid #fde68a',
+          borderRadius: '16px',
+          padding: 16,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: 10,
+          gap: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ArrowDownCircle size={18} color="var(--accent-amber)" />
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+            <ArrowDownCircle size={18} color="#d97706" />
+            <span style={{ fontSize: '0.86rem', color: '#92400e' }}>
               <strong>{pendingManifest.length} recording(s)</strong> waiting on MicroSD card.
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {pendingManifest.map((item) => (
               <button
                 key={item.sessionId}
                 onClick={() => onSyncSession(item)}
-                className="btn btn-secondary"
-                style={{ padding: '4px 10px', fontSize: '0.74rem' }}
+                className="btn btn-forest"
+                style={{ padding: '6px 14px', fontSize: '0.78rem' }}
               >
                 Sync {item.filename}
               </button>
@@ -206,33 +251,33 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
       )}
 
       {/* Sessions List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {filteredSessions.map((session) => (
           <div
             key={session.id}
-            className="glass-card"
+            className="white-card"
             style={{
-              padding: 18,
+              padding: 22,
               display: 'flex',
               flexDirection: 'column',
-              gap: 12,
+              gap: 14,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
               <div 
                 onClick={() => onSelectSession(session)}
                 style={{ cursor: 'pointer', flex: 1 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                     {session.title}
                   </h3>
                   {session.isFavorite && (
-                    <Star size={15} fill="var(--accent-amber)" color="var(--accent-amber)" />
+                    <Star size={16} fill="var(--accent-amber)" color="var(--accent-amber)" />
                   )}
                 </div>
 
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <span>{formatDate(session.capturedAtMs)}</span>
                   <span>•</span>
                   <span>{formatDuration(session.metadata.durationSeconds)}</span>
@@ -279,9 +324,9 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
             <p 
               onClick={() => onSelectSession(session)}
               style={{
-                fontSize: '0.84rem',
+                fontSize: '0.88rem',
                 color: 'var(--text-secondary)',
-                lineHeight: 1.5,
+                lineHeight: 1.6,
                 cursor: 'pointer',
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
@@ -299,19 +344,16 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
               justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: 8,
-              paddingTop: 8,
+              paddingTop: 12,
               borderTop: '1px solid var(--border-subtle)',
             }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {session.tags.map((tag, i) => (
                   <span
                     key={i}
-                    className="badge"
+                    className="badge badge-emerald"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid var(--border-subtle)',
-                      color: 'var(--text-secondary)',
-                      fontSize: '0.7rem',
+                      fontSize: '0.72rem',
                       textTransform: 'none',
                     }}
                   >
@@ -320,14 +362,14 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
                 ))}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="badge badge-emerald" style={{ fontSize: '0.68rem' }}>
-                  <CheckCircle2 size={11} /> Synced
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="badge badge-emerald" style={{ fontSize: '0.7rem' }}>
+                  <CheckCircle2 size={11} /> Synced Local
                 </span>
                 <button
                   onClick={() => onSelectSession(session)}
-                  className="btn btn-primary"
-                  style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                  className="btn btn-forest"
+                  style={{ padding: '7px 18px', fontSize: '0.82rem' }}
                 >
                   <Play size={13} fill="currentColor" /> Play & Review
                 </button>
@@ -337,11 +379,11 @@ export const SessionListView: React.FC<SessionListViewProps> = ({
         ))}
 
         {filteredSessions.length === 0 && (
-          <div className="glass-card" style={{ padding: 40, textAlign: 'center' }}>
-            <FileAudio size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
-            <h4 style={{ marginBottom: 6 }}>No recording sessions found</h4>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-              Try adjusting your search filters or start a recording on the pendant.
+          <div className="white-card" style={{ padding: 48, textAlign: 'center' }}>
+            <FileAudio size={42} color="var(--accent-forest)" style={{ margin: '0 auto 14px' }} />
+            <h4 style={{ fontSize: '1.2rem', marginBottom: 6 }}>No recording sessions found</h4>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', maxWidth: 460, margin: '0 auto' }}>
+              Try adjusting your search query, clearing filters, or record a new voice memo using the Ambient Pendant.
             </p>
           </div>
         )}

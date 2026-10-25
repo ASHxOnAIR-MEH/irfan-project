@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Mic2, Sparkles, CheckSquare, Settings2 } from 'lucide-react';
+import { LayoutDashboard, Radio, Mic2, Sparkles, CheckSquare, Settings2 } from 'lucide-react';
 
 interface NavigationProps {
   activeTab: string;
@@ -13,23 +13,25 @@ export const Navigation: React.FC<NavigationProps> = ({
   pendingSyncCount,
 }) => {
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'sessions', label: 'Sessions', icon: Mic2, badge: pendingSyncCount > 0 ? pendingSyncCount : null },
-    { id: 'insights', label: 'Insights & Tasks', icon: Sparkles },
-    { id: 'actions', label: 'Action Items', icon: CheckSquare },
-    { id: 'settings', label: 'Settings & Privacy', icon: Settings2 },
+    { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+    { id: 'device', label: 'Device', icon: Radio },
+    { id: 'sessions', label: 'Recordings', icon: Mic2, badge: pendingSyncCount > 0 ? pendingSyncCount : null },
+    { id: 'insights', label: 'Insights', icon: Sparkles },
+    { id: 'actions', label: 'Tasks', icon: CheckSquare },
+    { id: 'settings', label: 'Settings', icon: Settings2 },
   ];
 
   return (
     <>
-      {/* Desktop Top Sub-Nav */}
+      {/* Tablet Sub-Nav (visible only between 640px and 900px where desktop header nav is hidden) */}
       <nav 
-        className="desktop-nav"
+        className="tablet-subnav"
         style={{
           display: 'none',
-          background: 'rgba(11, 15, 25, 0.7)',
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(16px)',
           borderBottom: '1px solid var(--border-subtle)',
-          padding: '4px 16px',
+          padding: '6px 16px',
         }}
       >
         <div style={{
@@ -38,6 +40,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           display: 'flex',
           alignItems: 'center',
           gap: 6,
+          overflowX: 'auto',
         }}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -50,24 +53,24 @@ export const Navigation: React.FC<NavigationProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  padding: '8px 16px',
-                  background: isActive ? 'rgba(0, 242, 254, 0.12)' : 'transparent',
+                  padding: '7px 16px',
+                  background: isActive ? 'var(--accent-forest)' : 'transparent',
                   border: 'none',
-                  borderBottom: `2px solid ${isActive ? 'var(--accent-cyan)' : 'transparent'}`,
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  color: isActive ? '#ffffff' : 'var(--text-secondary)',
                   cursor: 'pointer',
-                  fontSize: '0.86rem',
-                  fontWeight: isActive ? 700 : 500,
+                  fontSize: '0.84rem',
+                  fontWeight: isActive ? 700 : 600,
+                  borderRadius: 'var(--radius-full)',
                   transition: 'all 0.15s ease',
-                  borderRadius: '6px 6px 0 0',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <Icon size={16} color={isActive ? 'var(--accent-cyan)' : 'var(--text-muted)'} />
+                <Icon size={15} color={isActive ? '#34d399' : 'currentColor'} />
                 <span>{tab.label}</span>
                 {tab.badge && (
                   <span style={{
-                    background: 'var(--accent-amber)',
-                    color: '#06080d',
+                    background: '#f59e0b',
+                    color: '#ffffff',
                     fontSize: '0.65rem',
                     fontWeight: 800,
                     padding: '1px 6px',
@@ -82,7 +85,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
       </nav>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar (< 640px) */}
       <nav 
         className="mobile-nav"
         style={{
@@ -91,15 +94,16 @@ export const Navigation: React.FC<NavigationProps> = ({
           bottom: 0,
           left: 0,
           right: 0,
-          height: '62px',
-          background: 'rgba(6, 8, 13, 0.92)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
+          height: '64px',
+          background: 'rgba(255, 255, 255, 0.96)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
           borderTop: '1px solid var(--border-subtle)',
           zIndex: 90,
           justifyContent: 'space-around',
           alignItems: 'center',
           paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -4px 20px rgba(5, 41, 30, 0.05)',
         }}
       >
         {tabs.map((tab) => {
@@ -114,10 +118,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 4,
+                gap: 3,
                 background: 'transparent',
                 border: 'none',
-                color: isActive ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                color: isActive ? 'var(--accent-forest)' : 'var(--text-muted)',
                 cursor: 'pointer',
                 position: 'relative',
                 flex: 1,
@@ -125,14 +129,14 @@ export const Navigation: React.FC<NavigationProps> = ({
               }}
             >
               <div style={{ position: 'relative' }}>
-                <Icon size={20} strokeWidth={isActive ? 2.4 : 1.8} />
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} color={isActive ? 'var(--accent-forest)' : 'currentColor'} />
                 {tab.badge && (
                   <span style={{
                     position: 'absolute',
                     top: -4,
                     right: -8,
-                    background: 'var(--accent-amber)',
-                    color: '#06080d',
+                    background: '#f59e0b',
+                    color: '#ffffff',
                     fontSize: '0.6rem',
                     fontWeight: 800,
                     width: 14,
@@ -146,8 +150,8 @@ export const Navigation: React.FC<NavigationProps> = ({
                   </span>
                 )}
               </div>
-              <span style={{ fontSize: '0.68rem', fontWeight: isActive ? 700 : 500 }}>
-                {tab.label.split(' ')[0]}
+              <span style={{ fontSize: '0.68rem', fontWeight: isActive ? 800 : 500 }}>
+                {tab.label}
               </span>
             </button>
           );
@@ -155,10 +159,12 @@ export const Navigation: React.FC<NavigationProps> = ({
       </nav>
 
       <style>{`
-        @media (min-width: 768px) {
-          .desktop-nav {
+        @media (min-width: 640px) and (max-width: 899px) {
+          .tablet-subnav {
             display: block !important;
           }
+        }
+        @media (min-width: 640px) {
           .mobile-nav {
             display: none !important;
           }

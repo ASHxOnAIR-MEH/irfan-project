@@ -36,6 +36,12 @@ export interface ITransport {
   /** Trigger recording directly from UI */
   startRecording(): Promise<boolean>;
 
+  /** Pause active recording without stopping session */
+  pauseRecording?(): Promise<boolean>;
+
+  /** Resume paused recording session */
+  resumeRecording?(): Promise<boolean>;
+
   /** Stop recording and return created session ID */
   stopRecording(): Promise<string | null>;
 

@@ -5,10 +5,8 @@ import {
   Copy, 
   Check, 
   Clock, 
-  ExternalLink, 
-  CheckSquare, 
-  Filter,
-  Sparkles
+  CheckSquare,
+  ArrowRight
 } from 'lucide-react';
 import { RecordingSession, ActionItem } from '../../types/session';
 
@@ -23,10 +21,10 @@ export const GlobalActionItemsView: React.FC<GlobalActionItemsViewProps> = ({
   onToggleActionItem,
   onOpenSession,
 }) => {
-  const [copied, setCopied] = useState(false);
   const [filterState, setFilterState] = useState<'all' | 'pending' | 'completed'>('all');
+  const [copied, setCopied] = useState(false);
 
-  // Collate all action items with parent session context
+  // Collate all action items with their parent session metadata
   const allTasks: Array<{ session: RecordingSession; item: ActionItem }> = [];
   sessions.forEach((s) => {
     if (s.insights && s.insights.actionItems) {
@@ -54,16 +52,16 @@ export const GlobalActionItemsView: React.FC<GlobalActionItemsViewProps> = ({
   const completedCount = allTasks.filter((t) => t.item.completed).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 980, margin: '0 auto', width: '100%' }}>
       {/* Header Card */}
-      <div className="glass-card" style={{ padding: 22 }}>
+      <div className="white-card" style={{ padding: 26 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <CheckSquare size={20} color="var(--accent-emerald)" />
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 800 }}>Extracted Action Items</h2>
+              <CheckSquare size={22} color="var(--accent-forest)" />
+              <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Extracted Action Items</h2>
             </div>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+            <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)' }}>
               Consolidated actionable tasks and deliverables extracted by AI across all voice memos.
             </p>
           </div>
@@ -72,7 +70,7 @@ export const GlobalActionItemsView: React.FC<GlobalActionItemsViewProps> = ({
             <button
               onClick={copyTasks}
               className="btn btn-secondary"
-              style={{ padding: '7px 14px', fontSize: '0.8rem' }}
+              style={{ padding: '8px 18px', fontSize: '0.82rem' }}
             >
               {copied ? <Check size={14} color="var(--accent-emerald)" /> : <Copy size={14} />}
               <span>{copied ? 'Copied' : 'Export to Markdown'}</span>
@@ -81,10 +79,10 @@ export const GlobalActionItemsView: React.FC<GlobalActionItemsViewProps> = ({
         </div>
 
         {/* Filter Pills */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
           <button
             onClick={() => setFilterState('all')}
-            className={`badge ${filterState === 'all' ? 'badge-cyan' : 'badge-secondary'}`}
+            className={`badge ${filterState === 'all' ? 'badge-forest' : 'badge-secondary'}`}
             style={{ cursor: 'pointer', padding: '6px 14px' }}
           >
             All Tasks ({allTasks.length})
@@ -107,70 +105,102 @@ export const GlobalActionItemsView: React.FC<GlobalActionItemsViewProps> = ({
       </div>
 
       {/* Task List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {filteredTasks.map(({ session, item }) => (
           <div
-            key={`${session.id}_${item.id}`}
-            className="glass-card"
+            key={item.id}
+            className="white-card"
             style={{
-              padding: '14px 18px',
+              padding: '16px 20px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: 12,
-              background: item.completed ? 'rgba(16, 185, 129, 0.04)' : 'var(--bg-card)',
-              borderColor: item.completed ? 'rgba(16, 185, 129, 0.2)' : 'var(--border-subtle)',
+              gap: 16,
+              background: item.completed ? '#f0fdf4' : '#ffffff',
+              border: `1.5px solid ${item.completed ? '#a7f3d0' : 'var(--border-card)'}`,
             }}
           >
+            {/* Left: Checkbox & Description */}
             <div 
               onClick={() => onToggleActionItem(session.id, item.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', flex: 1 }}
             >
-              {item.completed ? (
-                <CheckCircle2 size={20} color="var(--accent-emerald)" />
-              ) : (
-                <Circle size={20} color="var(--text-muted)" />
-              )}
+              <div style={{ paddingTop: 2 }}>
+                {item.completed ? (
+                  <CheckCircle2 size={20} color="var(--accent-emerald)" />
+                ) : (
+                  <Circle size={20} color="#94a3b8" />
+                )}
+              </div>
 
               <div>
                 <div style={{
-                  fontSize: '0.9rem',
-                  fontWeight: 600,
+                  fontSize: '0.94rem',
+                  fontWeight: item.completed ? 500 : 700,
                   textDecoration: item.completed ? 'line-through' : 'none',
                   color: item.completed ? 'var(--text-muted)' : 'var(--text-primary)',
-                  marginBottom: 2,
+                  lineHeight: 1.5,
                 }}>
                   {item.description}
                 </div>
 
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span>From: <strong>{session.title}</strong></span>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <span>Source: <strong>{session.title}</strong></span>
                   {item.assignedTo && (
-                    <span style={{ color: 'var(--accent-cyan)' }}>@{item.assignedTo}</span>
+                    <>
+                      <span>•</span>
+                      <span style={{ color: 'var(--accent-forest)', fontWeight: 700 }}>@{item.assignedTo}</span>
+                    </>
+                  )}
+                  {item.dueSuggestion && (
+                    <>
+                      <span>•</span>
+                      <span style={{ color: 'var(--accent-amber)' }}>Due: {item.dueSuggestion}</span>
+                    </>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Jump to audio timestamp */}
-            <button
-              onClick={() => onOpenSession(session, item.sourceTimestampMs)}
-              className="btn btn-secondary"
-              style={{ padding: '5px 10px', fontSize: '0.74rem', flexShrink: 0 }}
-              title="Open session and jump to audio location"
-            >
-              <Clock size={13} color="var(--accent-cyan)" />
-              <span>Listen</span>
-            </button>
+            {/* Right: Seek button & Session Jump */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {item.sourceTimestampMs !== undefined && (
+                <button
+                  onClick={() => onOpenSession(session, item.sourceTimestampMs)}
+                  className="btn btn-secondary"
+                  title="Jump directly to spoken timestamp in audio"
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '0.74rem',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--accent-forest)',
+                    fontWeight: 700,
+                  }}
+                >
+                  <Clock size={12} /> Jump to Audio
+                </button>
+              )}
+
+              <button
+                onClick={() => onOpenSession(session)}
+                className="btn btn-secondary"
+                style={{ padding: '6px 10px' }}
+                title="Open parent session details"
+              >
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
         ))}
 
         {filteredTasks.length === 0 && (
-          <div className="glass-card" style={{ padding: 40, textAlign: 'center' }}>
-            <CheckSquare size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
-            <h4 style={{ marginBottom: 6 }}>No tasks in this filter</h4>
+          <div className="white-card" style={{ padding: 48, textAlign: 'center' }}>
+            <CheckSquare size={38} color="var(--accent-forest)" style={{ margin: '0 auto 12px' }} />
+            <h4 style={{ fontSize: '1.15rem', marginBottom: 4 }}>No action items found</h4>
             <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-              Record a session or sync from the pendant to extract action items automatically.
+              {filterState === 'completed'
+                ? 'No completed tasks yet. Check off items as you finish them.'
+                : 'All tasks completed or none extracted yet.'}
             </p>
           </div>
         )}

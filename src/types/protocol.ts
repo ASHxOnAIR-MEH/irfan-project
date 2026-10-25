@@ -40,6 +40,8 @@ export interface TransferState {
 export type FirmwareCommand = 
   | { type: 'GET_TELEMETRY' }
   | { type: 'START_RECORD' }
+  | { type: 'PAUSE_RECORD' }
+  | { type: 'RESUME_RECORD' }
   | { type: 'STOP_RECORD' }
   | { type: 'GET_MANIFEST' }
   | { type: 'REQUEST_CHUNK'; sessionId: string; chunkIndex: number }

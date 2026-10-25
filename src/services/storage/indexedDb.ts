@@ -186,6 +186,21 @@ class LocalDatabase {
       tx.onerror = () => reject(tx.error);
     });
   }
+
+  public async getStorageQuota(): Promise<{ usageBytes: number; quotaBytes: number; percentUsed: number }> {
+    if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+      try {
+        const estimate = await navigator.storage.estimate();
+        const usageBytes = estimate.usage || 0;
+        const quotaBytes = estimate.quota || 0;
+        const percentUsed = quotaBytes > 0 ? Math.round((usageBytes / quotaBytes) * 100) : 0;
+        return { usageBytes, quotaBytes, percentUsed };
+      } catch {
+        // Soft fallback
+      }
+    }
+    return { usageBytes: 0, quotaBytes: 0, percentUsed: 0 };
+  }
 }
 
 export const localDb = new LocalDatabase();

@@ -52,63 +52,60 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Provenance & Privacy Disclosure Banner */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: 8,
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 10,
-        padding: '8px 14px',
-        fontSize: '0.76rem',
+        gap: 10,
+        background: '#ecfdf5',
+        border: '1.5px solid #a7f3d0',
+        borderRadius: '14px',
+        padding: '10px 18px',
+        fontSize: '0.8rem',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <ShieldCheck size={14} color="var(--accent-emerald)" />
-          <span style={{ color: 'var(--text-secondary)' }}>
-            Processing Location:
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ShieldCheck size={16} color="var(--accent-emerald)" />
+          <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Processing Pipeline:
           </span>
-          <span className="badge badge-cyan" style={{ fontSize: '0.68rem', padding: '2px 8px' }}>
-            {insights.isDemonstrationData ? 'Simulated Offline Model' : 'Client-Side Transformer'}
+          <span className="badge badge-emerald" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+            {insights.isDemonstrationData ? 'Simulated Offline Model' : 'Client-Side Transformers'}
           </span>
         </div>
 
-        <span style={{ color: 'var(--text-muted)' }}>
-          {insights.processingDurationMs ? `Latency: ${insights.processingDurationMs}ms` : 'Local Execution'}
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+          {insights.processingDurationMs ? `Latency: ${insights.processingDurationMs}ms` : '100% Local Execution'}
         </span>
       </div>
 
-      {/* 1. Executive Summary */}
-      <div className="glass-card" style={{ padding: 20 }}>
+      {/* 1. Executive Summary Card */}
+      <div className="white-card" style={{ padding: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Sparkles size={18} color="var(--accent-cyan)" />
-          <h3 style={{ fontSize: '1.05rem' }}>Executive Summary</h3>
+          <Sparkles size={20} color="var(--accent-emerald)" />
+          <h3 style={{ fontSize: '1.15rem' }}>Executive Summary</h3>
         </div>
-        <p style={{ fontSize: '0.92rem', lineHeight: 1.65, color: 'var(--text-primary)' }}>
+        <p style={{ fontSize: '0.94rem', lineHeight: 1.7, color: 'var(--text-primary)' }}>
           {insights.executiveSummary}
         </p>
       </div>
 
       {/* 2. Important Topics */}
-      <div className="glass-card" style={{ padding: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Tag size={18} color="var(--accent-purple)" />
-          <h3 style={{ fontSize: '1.05rem' }}>Important Topics</h3>
+      <div className="white-card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Tag size={18} color="var(--accent-forest)" />
+          <h3 style={{ fontSize: '1.15rem' }}>Key Discussion Topics</h3>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {insights.importantTopics.map((topic, idx) => (
             <span
               key={idx}
-              className="badge"
+              className="badge badge-emerald"
               style={{
-                background: 'rgba(139, 92, 246, 0.14)',
-                border: '1px solid rgba(139, 92, 246, 0.35)',
-                color: '#c4b5fd',
                 fontSize: '0.8rem',
-                padding: '6px 12px',
+                padding: '6px 14px',
                 textTransform: 'none',
               }}
             >
@@ -118,28 +115,28 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Key Concepts */}
+      {/* 3. Key Concepts & Terminology */}
       {insights.keyConcepts && insights.keyConcepts.length > 0 && (
-        <div className="glass-card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <BookOpen size={18} color="var(--accent-cyan)" />
-            <h3 style={{ fontSize: '1.05rem' }}>Key Concepts & Terminology</h3>
+        <div className="white-card" style={{ padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <BookOpen size={18} color="var(--accent-forest)" />
+            <h3 style={{ fontSize: '1.15rem' }}>Key Concepts & Definitions</h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
             {insights.keyConcepts.map((concept, idx) => (
               <div
                 key={idx}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
+                  background: '#f8faf9',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 10,
-                  padding: 14,
+                  borderRadius: '14px',
+                  padding: 16,
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--accent-cyan)', marginBottom: 4 }}>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--accent-forest)', marginBottom: 4 }}>
                   {concept.term}
                 </div>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
                   {concept.explanation}
                 </div>
               </div>
@@ -149,27 +146,27 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
       )}
 
       {/* 4. Things to Remember */}
-      <div className="glass-card" style={{ padding: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <div className="white-card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <BookmarkCheck size={18} color="var(--accent-emerald)" />
-          <h3 style={{ fontSize: '1.05rem' }}>Things to Remember</h3>
+          <h3 style={{ fontSize: '1.15rem' }}>Things to Remember</h3>
         </div>
-        <ul style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 20 }}>
+        <ul style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 22 }}>
           {insights.thingsToRemember.map((item, idx) => (
-            <li key={idx} style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              <span style={{ color: 'var(--text-primary)' }}>{item}</span>
+            <li key={idx} style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{item}</strong>
             </li>
           ))}
         </ul>
       </div>
 
       {/* 5. Action Items (Interactive Tasks) */}
-      <div className="glass-card" style={{ padding: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div className="white-card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <CheckCircle2 size={18} color="var(--accent-emerald)" />
-            <h3 style={{ fontSize: '1.05rem' }}>Action Items</h3>
-            <span className="badge badge-emerald" style={{ fontSize: '0.68rem', padding: '2px 6px' }}>
+            <h3 style={{ fontSize: '1.15rem' }}>Action Items & Follow-ups</h3>
+            <span className="badge badge-emerald" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
               {insights.actionItems.filter((a) => a.completed).length} / {insights.actionItems.length}
             </span>
           </div>
@@ -177,7 +174,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
           <button
             onClick={copyActionItems}
             className="btn btn-secondary"
-            style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+            style={{ padding: '6px 14px', fontSize: '0.78rem' }}
             title="Copy tasks to clipboard"
           >
             {copied ? <Check size={13} color="var(--accent-emerald)" /> : <Copy size={13} />}
@@ -185,7 +182,7 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
           </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {insights.actionItems.map((item: ActionItem) => (
             <div
               key={item.id}
@@ -193,32 +190,33 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '10px 12px',
-                borderRadius: 8,
-                background: item.completed ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255, 255, 255, 0.02)',
-                border: `1px solid ${item.completed ? 'rgba(16, 185, 129, 0.25)' : 'var(--border-subtle)'}`,
+                padding: '12px 14px',
+                borderRadius: '12px',
+                background: item.completed ? '#f0fdf4' : '#ffffff',
+                border: `1.5px solid ${item.completed ? '#a7f3d0' : 'var(--border-subtle)'}`,
                 transition: 'all 0.15s ease',
               }}
             >
               <div 
                 onClick={() => onToggleActionItem && onToggleActionItem(item.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flex: 1 }}
               >
                 {item.completed ? (
                   <CheckCircle2 size={18} color="var(--accent-emerald)" />
                 ) : (
-                  <Circle size={18} color="var(--text-muted)" />
+                  <Circle size={18} color="#94a3b8" />
                 )}
                 <div>
                   <span style={{
-                    fontSize: '0.86rem',
+                    fontSize: '0.88rem',
                     textDecoration: item.completed ? 'line-through' : 'none',
                     color: item.completed ? 'var(--text-muted)' : 'var(--text-primary)',
+                    fontWeight: item.completed ? 500 : 600,
                   }}>
                     {item.description}
                   </span>
                   {item.assignedTo && (
-                    <span style={{ marginLeft: 8, fontSize: '0.72rem', color: 'var(--accent-cyan)' }}>
+                    <span style={{ marginLeft: 8, fontSize: '0.74rem', color: 'var(--accent-forest)', fontWeight: 700 }}>
                       @{item.assignedTo}
                     </span>
                   )}
@@ -231,13 +229,14 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
                   className="btn btn-secondary"
                   title="Jump audio to when this was spoken"
                   style={{
-                    padding: '3px 8px',
-                    fontSize: '0.68rem',
+                    padding: '4px 10px',
+                    fontSize: '0.72rem',
                     fontFamily: 'var(--font-mono)',
-                    color: 'var(--accent-cyan)',
+                    color: 'var(--accent-forest)',
+                    fontWeight: 700,
                   }}
                 >
-                  <Clock size={11} /> {formatTimestamp(item.sourceTimestampMs)}
+                  <Clock size={12} /> {formatTimestamp(item.sourceTimestampMs)}
                 </button>
               )}
             </div>
@@ -247,57 +246,57 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
 
       {/* 6. Study Questions & Flashcards */}
       {insights.studyQuestions && insights.studyQuestions.length > 0 && (
-        <div className="glass-card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <HelpCircle size={18} color="var(--accent-amber)" />
-            <h3 style={{ fontSize: '1.05rem' }}>Study Questions & Memory Retention</h3>
+        <div className="white-card" style={{ padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <HelpCircle size={18} color="var(--accent-emerald)" />
+            <h3 style={{ fontSize: '1.15rem' }}>Study Review Questions</h3>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {insights.studyQuestions.map((q) => {
-              const isOpen = !!expandedQuestions[q.id];
+              const isExpanded = !!expandedQuestions[q.id];
+
               return (
                 <div
                   key={q.id}
                   style={{
                     border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
+                    borderRadius: '12px',
+                    background: '#f8faf9',
                     overflow: 'hidden',
-                    background: 'rgba(255, 255, 255, 0.02)',
                   }}
                 >
                   <button
                     onClick={() => toggleQuestion(q.id)}
                     style={{
                       width: '100%',
-                      textAlign: 'left',
-                      padding: '12px 14px',
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-primary)',
-                      fontWeight: 600,
-                      fontSize: '0.86rem',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      background: 'transparent',
+                      border: 'none',
+                      textAlign: 'left',
                       cursor: 'pointer',
                     }}
                   >
-                    <span>{q.question}</span>
-                    {isOpen ? <ChevronUp size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />}
+                    <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                      {q.question}
+                    </span>
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
 
-                  {isOpen && (
+                  {isExpanded && (
                     <div style={{
-                      padding: '12px 14px',
-                      background: 'rgba(0, 0, 0, 0.25)',
-                      borderTop: '1px solid var(--border-subtle)',
-                      fontSize: '0.82rem',
-                      lineHeight: 1.55,
+                      padding: '0 16px 14px',
+                      fontSize: '0.84rem',
                       color: 'var(--text-secondary)',
+                      lineHeight: 1.6,
+                      borderTop: '1px solid var(--border-subtle)',
+                      paddingTop: 10,
                     }}>
-                      <div style={{ fontWeight: 600, color: 'var(--accent-emerald)', marginBottom: 4 }}>
-                        Key Answer:
+                      <div style={{ fontWeight: 700, color: 'var(--accent-forest)', marginBottom: 4, fontSize: '0.78rem' }}>
+                        SUMMARY ANSWER:
                       </div>
                       {q.answerSummary}
                     </div>

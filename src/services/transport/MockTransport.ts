@@ -76,12 +76,14 @@ export class MockTransport implements ITransport {
 
   public async connect(): Promise<boolean> {
     this.status.connectionState = 'connecting';
+    this.status.connectionErrorMessage = null;
     this.notifyStatus();
 
     await new Promise((resolve) => setTimeout(resolve, 600)); // Simulate BLE/WiFi handshake
 
     this.connected = true;
     this.status.connectionState = 'connected';
+    this.status.connectionErrorMessage = null;
     this.status.clock.deviceRtcTimestampMs = Date.now();
     this.status.clock.isClockSynchronized = true;
     this.startHardwareTicker();
@@ -93,6 +95,7 @@ export class MockTransport implements ITransport {
     this.stopHardwareTicker();
     this.connected = false;
     this.status.connectionState = 'disconnected';
+    this.status.connectionErrorMessage = null;
     this.notifyStatus();
   }
 
@@ -279,8 +282,35 @@ export class MockTransport implements ITransport {
     return true;
   }
 
+  public async pauseRecording(): Promise<boolean> {
+    if (!this.connected) throw new Error('Pendant is disconnected');
+    if (this.status.operatingMode === 'paused') return true;
+    if (this.status.operatingMode !== 'recording') {
+      throw new Error('Cannot pause: Device is not currently recording');
+    }
+    this.status.operatingMode = 'paused';
+    this.notifyStatus();
+    return true;
+  }
+
+  public async resumeRecording(): Promise<boolean> {
+    if (!this.connected) throw new Error('Pendant is disconnected');
+    if (this.status.privacyMuteActive) {
+      throw new Error('Hardware Privacy Button is active. Disengage privacy button to resume recording.');
+    }
+    if (this.status.operatingMode === 'recording') return true;
+    if (this.status.operatingMode !== 'paused') {
+      throw new Error('Cannot resume: Device is not paused');
+    }
+    this.status.operatingMode = 'recording';
+    this.notifyStatus();
+    return true;
+  }
+
   public async stopRecording(): Promise<string | null> {
-    if (!this.connected || this.status.operatingMode !== 'recording') return null;
+    if (!this.connected || (this.status.operatingMode !== 'recording' && this.status.operatingMode !== 'paused')) {
+      return null;
+    }
 
     const recId = this.status.activeRecordingId || `REC_${Date.now()}`;
     const duration = Math.max(3, this.status.activeRecordingDurationSec);
@@ -312,7 +342,7 @@ export class MockTransport implements ITransport {
 
   public async setPrivacyMute(enabled: boolean): Promise<boolean> {
     this.status.privacyMuteActive = enabled;
-    if (enabled && this.status.operatingMode === 'recording') {
+    if (enabled && (this.status.operatingMode === 'recording' || this.status.operatingMode === 'paused')) {
       // Hardware privacy control pressed: immediately halt recording and commit audio to SD
       await this.stopRecording();
       this.status.operatingMode = 'privacy_muted';
@@ -329,6 +359,10 @@ export class MockTransport implements ITransport {
         return this.getStatusSnapshot();
       case 'START_RECORD':
         return this.startRecording();
+      case 'PAUSE_RECORD':
+        return this.pauseRecording();
+      case 'RESUME_RECORD':
+        return this.resumeRecording();
       case 'STOP_RECORD':
         return this.stopRecording();
       case 'GET_MANIFEST':
@@ -353,6 +387,18 @@ export class MockTransport implements ITransport {
         this.notifyStatus();
         return true;
     }
+  }
+
+  public simulateConnectionError(errorMessage: string = 'Simulated connection drop: ESP32 GATT disconnected unexpected timeout'): void {
+    this.stopHardwareTicker();
+    this.connected = false;
+    this.status.connectionState = 'error';
+    this.status.connectionErrorMessage = errorMessage;
+    this.notifyStatus();
+  }
+
+  public setFailNextChunk(fail: boolean): void {
+    this.failNextChunk = fail;
   }
 
   // --- Fault Injection & Hardware Testing Controls ---

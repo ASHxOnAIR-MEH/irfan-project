@@ -13,9 +13,11 @@ import { SessionListView } from './components/sessions/SessionListView';
 import { SessionDetailView } from './components/sessions/SessionDetailView';
 import { GlobalActionItemsView } from './components/actions/GlobalActionItemsView';
 import { SettingsView } from './components/settings/SettingsView';
+import { DeviceConnectionView } from './components/device/DeviceConnectionView';
 import { TransferModal } from './components/sync/TransferModal';
 import { MockHardwareControls } from './components/simulator/MockHardwareControls';
-import { Sparkles, Brain, HelpCircle } from 'lucide-react';
+import { GlobalInsightsView } from './components/insights/GlobalInsightsView';
+import { Sparkles } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [deviceStatus, setDeviceStatus] = useState<PendantDeviceStatus>(pendantManager.getStatus());
@@ -224,6 +226,15 @@ export const App: React.FC = () => {
               />
             )}
 
+            {/* Tab: Dedicated Device Connection & Telemetry */}
+            {activeTab === 'device' && (
+              <DeviceConnectionView
+                status={deviceStatus}
+                onOpenSimulator={() => setSimulatorOpen(true)}
+                onNavigateToSessions={() => setActiveTab('sessions')}
+              />
+            )}
+
             {/* Tab: Sessions List */}
             {activeTab === 'sessions' && (
               <SessionListView
@@ -249,45 +260,10 @@ export const App: React.FC = () => {
 
             {/* Tab: Global Insights & Topic Browser */}
             {activeTab === 'insights' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div className="glass-card" style={{ padding: 22 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <Brain size={22} color="var(--accent-purple)" />
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: 800 }}>Memory Synthesis & Topics</h2>
-                  </div>
-                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    High-level conceptual maps across all recorded ambient memory sessions.
-                  </p>
-                </div>
-
-                {sessions.map((s) => (
-                  <div 
-                    key={s.id} 
-                    className="glass-card" 
-                    style={{ padding: 20, cursor: 'pointer' }}
-                    onClick={() => handleSelectSession(s)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <h3 style={{ fontSize: '1.05rem', color: 'var(--text-primary)' }}>{s.title}</h3>
-                      <span className="badge badge-purple" style={{ textTransform: 'none' }}>
-                        {s.insights.sentiment || 'reflective'}
-                      </span>
-                    </div>
-
-                    <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
-                      {s.insights.executiveSummary}
-                    </p>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {s.insights.importantTopics.map((topic, i) => (
-                        <span key={i} className="badge" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd' }}>
-                          #{topic}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <GlobalInsightsView
+                sessions={sessions}
+                onSelectSession={handleSelectSession}
+              />
             )}
 
             {/* Tab: Global Action Items */}

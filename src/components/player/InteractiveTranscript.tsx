@@ -20,9 +20,15 @@ export const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
   segments,
   currentTimeMs,
   onSeekToMs,
-  searchFilter = '',
+  searchFilter,
 }) => {
   const activeSegmentRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (activeSegmentRef.current) {
+      activeSegmentRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [currentTimeMs]);
 
   const filtered = segments.filter((seg) => {
     if (!searchFilter) return true;
@@ -44,13 +50,13 @@ export const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
             onClick={() => onSeekToMs(seg.startMs)}
             style={{
               display: 'flex',
-              gap: 12,
-              padding: '12px 14px',
-              borderRadius: 'var(--radius-sm)',
+              gap: 14,
+              padding: '12px 16px',
+              borderRadius: '14px',
               background: isActive 
-                ? 'rgba(0, 242, 254, 0.08)' 
-                : 'rgba(255, 255, 255, 0.02)',
-              border: `1px solid ${isActive ? 'rgba(0, 242, 254, 0.35)' : 'var(--border-subtle)'}`,
+                ? '#ecfdf5' 
+                : '#fbfdfc',
+              border: `1.5px solid ${isActive ? 'var(--accent-emerald)' : '#e2f4ea'}`,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
               position: 'relative',
@@ -62,45 +68,69 @@ export const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',
-              minWidth: 60,
+              minWidth: 70,
               gap: 4,
             }}>
               <span 
                 style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
-                  color: isActive ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  color: isActive ? 'var(--accent-forest)' : 'var(--text-muted)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 3,
+                  gap: 4,
                 }}
               >
-                <Clock size={11} /> {formatTimestamp(seg.startMs)}
+                <Clock size={12} color={isActive ? 'var(--accent-emerald)' : 'currentColor'} /> 
+                {formatTimestamp(seg.startMs)}
               </span>
               {seg.speakerLabel && (
                 <span style={{
-                  fontSize: '0.65rem',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary)',
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  color: 'var(--accent-forest)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 3,
+                  background: '#d1fae5',
+                  padding: '1px 6px',
+                  borderRadius: 'var(--radius-full)',
                 }}>
                   <User size={10} /> {seg.speakerLabel}
                 </span>
               )}
             </div>
 
-            {/* Spoken Text */}
+            {/* Segment Content */}
             <div style={{ flex: 1 }}>
               <p style={{
-                fontSize: '0.88rem',
-                lineHeight: 1.55,
-                color: isActive ? '#ffffff' : 'var(--text-primary)',
-                fontWeight: isActive ? 500 : 400,
+                fontSize: '0.92rem',
+                lineHeight: 1.6,
+                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: isActive ? 600 : 400,
               }}>
-                {seg.text}
+                {seg.words ? (
+                  seg.words.map((w, wIdx) => {
+                    const isWordActive = currentTimeMs >= w.startMs && currentTimeMs <= w.endMs;
+                    return (
+                      <span
+                        key={wIdx}
+                        style={{
+                          background: isWordActive ? '#a7f3d0' : 'transparent',
+                          color: isWordActive ? 'var(--accent-forest)' : 'inherit',
+                          borderRadius: '3px',
+                          padding: '0 2px',
+                          transition: 'background-color 0.1s ease',
+                        }}
+                      >
+                        {w.word}{' '}
+                      </span>
+                    );
+                  })
+                ) : (
+                  seg.text
+                )}
               </p>
             </div>
           </div>
@@ -109,16 +139,9 @@ export const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
 
       {filtered.length === 0 && (
         <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)' }}>
-          No transcript segments matching search.
+          No transcript segments matching "{searchFilter}"
         </div>
       )}
-
-      <style>{`
-        .transcript-segment-row:hover {
-          background: rgba(255, 255, 255, 0.05) !important;
-          border-color: rgba(255, 255, 255, 0.18) !important;
-        }
-      `}</style>
     </div>
   );
 };

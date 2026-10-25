@@ -7,7 +7,7 @@
  */
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
-export type DeviceOperatingMode = 'idle' | 'recording' | 'syncing' | 'privacy_muted' | 'low_power' | 'error';
+export type DeviceOperatingMode = 'idle' | 'recording' | 'paused' | 'syncing' | 'privacy_muted' | 'low_power' | 'error';
 export type TransportType = 'mock' | 'web_ble' | 'wifi_http' | 'web_serial';
 
 export type ChargingStatusSignal = 'charging' | 'charged' | 'not_charging' | 'unknown';
@@ -90,4 +90,5 @@ export interface PendantDeviceStatus {
   transportType: TransportType;
   signalRssi: number | null; // dBm or null if not wireless
   privacyMuteActive: boolean; // True when hardware privacy button is engaged (blocks recording)
+  connectionErrorMessage?: string | null;
 }
