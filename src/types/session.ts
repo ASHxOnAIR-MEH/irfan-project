@@ -3,7 +3,7 @@
  */
 
 export interface AudioMetadata {
-  format: 'wav' | 'pcm' | 'opus' | 'mp3';
+  format: 'wav' | 'pcm' | 'opus' | 'mp3' | 'm4a' | 'aac' | 'ogg' | 'webm';
   sampleRateHz: number;
   channels: 1 | 2;
   bitDepth?: 16 | 24 | 32;
@@ -67,6 +67,8 @@ export interface AIAnalysis {
 
 export type SyncStatus = 'pendant_only' | 'syncing' | 'synced_local' | 'sync_failed';
 
+export type ProcessingStatus = 'awaiting_analysis' | 'processing' | 'completed' | 'failed';
+
 export interface RecordingSession {
   id: string;
   title: string;
@@ -77,6 +79,9 @@ export interface RecordingSession {
   insights: AIAnalysis;
   audioBlobUrl?: string; // in-memory Object URL created from IndexedDB blob
   syncStatus: SyncStatus;
+  processingStatus?: ProcessingStatus;
+  source?: 'pendant_mic' | 'imported_file' | 'simulation';
+  hasAudioMissing?: boolean;
   transferProgressPercent?: number;
   tags: string[];
   notes?: string;

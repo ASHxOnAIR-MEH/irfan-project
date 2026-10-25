@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { PendantDeviceStatus } from './types/device';
 import { SyncManifestItem, TransferState } from './types/protocol';
 import { RecordingSession } from './types/session';
 import { pendantManager } from './services/pendantManager';
 import { localDb } from './services/storage/indexedDb';
 import { ensureDemoDataSeeded } from './services/storage/seedData';
+import { probeAudioFile, sanitizeFilename } from './services/audio/audioFileService';
 
 import { Header } from './components/layout/Header';
 import { Navigation } from './components/layout/Navigation';
@@ -25,10 +26,23 @@ export const App: React.FC = () => {
   const [sessions, setSessions] = useState<RecordingSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<RecordingSession | null>(null);
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [pendingManifest, setPendingManifest] = useState<SyncManifestItem[]>([]);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Request tracker ref to prevent race conditions during rapid switching
+  const selectionRequestIdRef = useRef<number>(0);
+
+  // Revoke blob URL on unmount or URL replacement
+  useEffect(() => {
+    return () => {
+      if (selectedAudioUrl) {
+        URL.revokeObjectURL(selectedAudioUrl);
+      }
+    };
+  }, [selectedAudioUrl]);
 
   // Load local sessions from IndexedDB
   const refreshSessions = useCallback(async () => {
@@ -85,26 +99,48 @@ export const App: React.FC = () => {
     };
   }, [refreshSessions]);
 
-  // Load audio blob URL when a session is selected
+  // Load audio blob URL when a session is selected with race-condition prevention
   const handleSelectSession = async (session: RecordingSession, _seekMs?: number) => {
+    const requestId = ++selectionRequestIdRef.current;
     setSelectedSession(session);
     setActiveTab('session_detail');
 
-    // Revoke previous blob URL if needed
+    // Revoke previous blob URL immediately
     if (selectedAudioUrl) {
       URL.revokeObjectURL(selectedAudioUrl);
+      setSelectedAudioUrl(null);
     }
 
-    const blob = await localDb.getAudioBlob(session.id);
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      setSelectedAudioUrl(url);
-    } else {
-      setSelectedAudioUrl(null);
+    setIsAudioLoading(true);
+
+    try {
+      const blob = await localDb.getAudioBlob(session.id);
+
+      // Verify this request is still the most recent one
+      if (requestId !== selectionRequestIdRef.current) {
+        return;
+      }
+
+      if (blob && blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        setSelectedAudioUrl(url);
+      } else {
+        setSelectedAudioUrl(null);
+      }
+    } catch (err) {
+      if (requestId === selectionRequestIdRef.current) {
+        console.warn(`Could not load audio blob for session ${session.id}:`, err);
+        setSelectedAudioUrl(null);
+      }
+    } finally {
+      if (requestId === selectionRequestIdRef.current) {
+        setIsAudioLoading(false);
+      }
     }
   };
 
   const handleBackToSessions = () => {
+    selectionRequestIdRef.current += 1;
     setSelectedSession(null);
     if (selectedAudioUrl) {
       URL.revokeObjectURL(selectedAudioUrl);
@@ -121,7 +157,7 @@ export const App: React.FC = () => {
       await refreshSessions();
       handleSelectSession(syncedSession);
     } catch (err: unknown) {
-      alert(`Sync Failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+      alert(`Sync Failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -162,14 +198,57 @@ export const App: React.FC = () => {
     await refreshSessions();
   };
 
-  // Delete session
+  // Delete session atomically
   const handleDeleteSession = async (sessionId: string) => {
-    if (!confirm('Are you sure you want to delete this session from local storage?')) return;
-    await localDb.deleteSession(sessionId);
-    if (selectedSession && selectedSession.id === sessionId) {
-      setSelectedSession(null);
+    try {
+      await localDb.deleteSession(sessionId);
+      if (selectedSession && selectedSession.id === sessionId) {
+        selectionRequestIdRef.current += 1;
+        setSelectedSession(null);
+        if (selectedAudioUrl) {
+          URL.revokeObjectURL(selectedAudioUrl);
+          setSelectedAudioUrl(null);
+        }
+        setActiveTab('sessions');
+      }
+      await refreshSessions();
+    } catch (err: unknown) {
+      alert(`Failed to delete session: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
+  };
+
+  // Re-attach an imported audio file to a session whose audio is missing
+  const handleReimportAudioForSession = async (file: File) => {
+    if (!selectedSession) return;
+    try {
+      const probe = await probeAudioFile(file);
+      const updated: RecordingSession = {
+        ...selectedSession,
+        metadata: {
+          ...selectedSession.metadata,
+          format: probe.format,
+          sampleRateHz: probe.sampleRateHz,
+          channels: probe.channels,
+          durationSeconds: Math.round(probe.durationSeconds * 10) / 10,
+          fileSizeBytes: probe.fileSizeBytes,
+          checksumSha256: probe.checksumSha256,
+          filename: sanitizeFilename(file.name, selectedSession.metadata.filename, probe.format),
+        },
+        hasAudioMissing: false,
+      };
+
+      await localDb.saveSessionWithAudio(updated, file);
+      await refreshSessions();
+      handleSelectSession(updated);
+    } catch (err: unknown) {
+      alert(`Re-import audio failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  // Callback after importing an audio file from SessionListView
+  const handleSessionImported = async (newSession: RecordingSession) => {
     await refreshSessions();
+    handleSelectSession(newSession);
   };
 
   // Clear all data
@@ -178,6 +257,10 @@ export const App: React.FC = () => {
     await ensureDemoDataSeeded();
     await refreshSessions();
     setSelectedSession(null);
+    if (selectedAudioUrl) {
+      URL.revokeObjectURL(selectedAudioUrl);
+      setSelectedAudioUrl(null);
+    }
     setActiveTab('dashboard');
   };
 
@@ -189,6 +272,10 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         onTabChange={(tab) => {
           setSelectedSession(null);
+          if (selectedAudioUrl) {
+            URL.revokeObjectURL(selectedAudioUrl);
+            setSelectedAudioUrl(null);
+          }
           setActiveTab(tab);
         }}
         onToggleSimulator={() => setSimulatorOpen(!simulatorOpen)}
@@ -200,6 +287,10 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         onTabChange={(tab) => {
           setSelectedSession(null);
+          if (selectedAudioUrl) {
+            URL.revokeObjectURL(selectedAudioUrl);
+            setSelectedAudioUrl(null);
+          }
           setActiveTab(tab);
         }}
         pendingSyncCount={pendingManifest.length}
@@ -244,6 +335,7 @@ export const App: React.FC = () => {
                 onSyncSession={handleSyncSession}
                 onDeleteSession={handleDeleteSession}
                 onToggleFavorite={handleToggleFavorite}
+                onSessionImported={handleSessionImported}
               />
             )}
 
@@ -252,9 +344,22 @@ export const App: React.FC = () => {
               <SessionDetailView
                 session={selectedSession}
                 audioBlobUrl={selectedAudioUrl}
+                isAudioLoading={isAudioLoading}
+                canSyncFromPendant={
+                  deviceStatus.connectionState === 'connected' &&
+                  pendingManifest.some((m) => m.sessionId === selectedSession.id)
+                }
                 onBack={handleBackToSessions}
                 onToggleFavorite={handleToggleFavorite}
                 onToggleActionItem={handleToggleActionItem}
+                onAttemptSync={() => {
+                  const pending = pendingManifest.find((m) => m.sessionId === selectedSession.id);
+                  if (pending) {
+                    handleSyncSession(pending);
+                  }
+                }}
+                onReimportAudio={handleReimportAudioForSession}
+                onDeleteSession={handleDeleteSession}
               />
             )}
 

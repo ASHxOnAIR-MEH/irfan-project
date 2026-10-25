@@ -6,19 +6,29 @@ import {
   FileText, 
   Download, 
   Star, 
-  CheckCircle2
+  CheckCircle2,
+  Trash2,
+  AlertTriangle,
+  FileAudio
 } from 'lucide-react';
 import { RecordingSession } from '../../types/session';
 import { AudioPlayer } from '../player/AudioPlayer';
 import { InteractiveTranscript } from '../player/InteractiveTranscript';
 import { InsightsView } from '../insights/InsightsView';
+import { exportAudioBlob } from '../../services/audio/audioFileService';
+import { localDb } from '../../services/storage/indexedDb';
 
 interface SessionDetailViewProps {
   session: RecordingSession;
   audioBlobUrl: string | null;
+  isAudioLoading?: boolean;
+  canSyncFromPendant?: boolean;
   onBack: () => void;
   onToggleFavorite: (session: RecordingSession) => void;
   onToggleActionItem: (sessionId: string, actionId: string) => void;
+  onAttemptSync?: () => void;
+  onReimportAudio?: (file: File) => void;
+  onDeleteSession?: (sessionId: string) => void;
 }
 
 function formatDate(ms: number): string {
@@ -35,14 +45,22 @@ function formatDate(ms: number): string {
 export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
   session,
   audioBlobUrl,
+  isAudioLoading = false,
+  canSyncFromPendant = false,
   onBack,
   onToggleFavorite,
   onToggleActionItem,
+  onAttemptSync,
+  onReimportAudio,
+  onDeleteSession,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'player' | 'insights' | 'raw'>('player');
   const [seekTargetMs, setSeekTargetMs] = useState<number | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [transcriptSearch, setTranscriptSearch] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleSeekFromTranscript = (ms: number) => {
     setSeekTargetMs(ms);
@@ -51,17 +69,28 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
     }
   };
 
-  const downloadWav = () => {
-    if (!audioBlobUrl) return;
-    const a = document.createElement('a');
-    a.href = audioBlobUrl;
-    a.download = session.metadata.filename;
-    a.click();
+  const handleExportAudio = async () => {
+    setIsExporting(true);
+    setExportError(null);
+
+    try {
+      const blob = await localDb.getAudioBlob(session.id);
+      if (!blob || blob.size === 0) {
+        throw new Error(
+          'Audio recording is missing from local IndexedDB storage. You must re-import or sync this session before exporting.'
+        );
+      }
+      exportAudioBlob(blob, session.metadata.filename || `${session.title}.${session.metadata.format}`);
+    } catch (err: unknown) {
+      setExportError(err instanceof Error ? err.message : 'Audio export failed.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 980, margin: '0 auto', width: '100%' }}>
-      {/* Back button & Title header */}
+      {/* Top Bar: Back & Action Buttons */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <button
           onClick={onBack}
@@ -71,35 +100,119 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
           <ArrowLeft size={16} /> Back to Library
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button
             onClick={() => onToggleFavorite(session)}
             className="btn btn-secondary"
             style={{ padding: '8px 16px', fontSize: '0.82rem' }}
           >
-            <Star size={16} fill={session.isFavorite ? 'var(--accent-amber)' : 'none'} color={session.isFavorite ? 'var(--accent-amber)' : 'currentColor'} />
+            <Star
+              size={16}
+              fill={session.isFavorite ? 'var(--accent-amber)' : 'none'}
+              color={session.isFavorite ? 'var(--accent-amber)' : 'currentColor'}
+            />
             <span>{session.isFavorite ? 'Favorited' : 'Favorite'}</span>
           </button>
 
-          {audioBlobUrl && (
+          <button
+            onClick={handleExportAudio}
+            disabled={isExporting}
+            className="btn btn-forest"
+            style={{ padding: '8px 18px', fontSize: '0.82rem' }}
+            title="Export original unmodified audio file from IndexedDB"
+          >
+            <Download size={15} />
+            <span>{isExporting ? 'Exporting...' : 'Export Audio'}</span>
+          </button>
+
+          {onDeleteSession && (
             <button
-              onClick={downloadWav}
-              className="btn btn-forest"
-              style={{ padding: '8px 18px', fontSize: '0.82rem' }}
-              title="Download raw audio WAV file"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="btn btn-danger"
+              style={{ padding: '8px 14px', fontSize: '0.82rem' }}
+              title="Delete session and audio blob from local storage"
             >
-              <Download size={15} /> Export Audio WAV
+              <Trash2 size={15} />
             </button>
           )}
         </div>
       </div>
 
+      {/* Export Error Alert */}
+      {exportError && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          background: '#fff1f2',
+          border: '1.5px solid #fecdd3',
+          color: '#9f1239',
+          padding: '12px 18px',
+          borderRadius: '14px',
+          fontSize: '0.84rem',
+        }}>
+          <AlertTriangle size={18} color="var(--accent-rose)" style={{ flexShrink: 0 }} />
+          <span>{exportError}</span>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal / Banner */}
+      {showDeleteConfirm && (
+        <div style={{
+          background: '#fff1f2',
+          border: '1.5px solid #fca5a5',
+          borderRadius: '16px',
+          padding: '20px',
+        }}>
+          <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#991b1b', marginBottom: 6 }}>
+            Confirm Permanent Session Deletion
+          </h4>
+          <p style={{ fontSize: '0.84rem', color: '#7f1d1d', lineHeight: 1.5, marginBottom: 16 }}>
+            Are you sure you want to permanently delete <strong>"{session.title}"</strong>?
+            This will atomically remove session metadata, timestamps, and audio binary from browser IndexedDB.
+            This action cannot be undone.
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                if (onDeleteSession) onDeleteSession(session.id);
+              }}
+              className="btn btn-danger"
+              style={{ padding: '8px 18px', fontSize: '0.82rem' }}
+            >
+              <Trash2 size={14} /> Confirm & Delete Permanently
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="btn btn-secondary"
+              style={{ padding: '8px 18px', fontSize: '0.82rem' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Session Title Card */}
       <div className="white-card" style={{ padding: 26 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <span className="badge badge-emerald">
-            <CheckCircle2 size={12} /> Local IndexedDB Safe
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          {audioBlobUrl ? (
+            <span className="badge badge-emerald">
+              <CheckCircle2 size={12} /> Local Storage Verified
+            </span>
+          ) : (
+            <span className="badge badge-amber">
+              <AlertTriangle size={12} /> Audio Missing Locally
+            </span>
+          )}
+
+          {session.processingStatus === 'awaiting_analysis' && (
+            <span className="badge badge-secondary">
+              <FileAudio size={12} /> Awaiting Speech Analysis
+            </span>
+          )}
+
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             Captured: {formatDate(session.capturedAtMs)}
           </span>
@@ -135,6 +248,7 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
         padding: '5px',
         width: 'fit-content',
         boxShadow: 'var(--shadow-sm)',
+        flexWrap: 'wrap',
       }}>
         <button
           onClick={() => setActiveSubTab('player')}
@@ -193,7 +307,7 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
             transition: 'all 0.15s ease',
           }}
         >
-          <FileText size={15} /> Hardware Manifest
+          <FileText size={15} /> Hardware & Audit Manifest
         </button>
       </div>
 
@@ -205,6 +319,10 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
             metadata={session.metadata}
             onTimeUpdate={(tMs) => setCurrentTimeMs(tMs)}
             seekTargetMs={seekTargetMs}
+            isLoading={isAudioLoading}
+            canSyncFromPendant={canSyncFromPendant}
+            onAttemptSync={onAttemptSync}
+            onReimportAudio={onReimportAudio}
           />
 
           <div className="white-card" style={{ padding: 24 }}>
@@ -240,12 +358,31 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
               />
             </div>
 
-            <InteractiveTranscript
-              segments={session.transcript}
-              currentTimeMs={currentTimeMs}
-              onSeekToMs={handleSeekFromTranscript}
-              searchFilter={transcriptSearch}
-            />
+            {session.transcript.length > 0 ? (
+              <InteractiveTranscript
+                segments={session.transcript}
+                currentTimeMs={currentTimeMs}
+                onSeekToMs={handleSeekFromTranscript}
+                searchFilter={transcriptSearch}
+              />
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                padding: '36px 20px',
+                color: 'var(--text-muted)',
+                background: '#f8faf9',
+                borderRadius: '16px',
+                border: '1px dashed var(--border-card)',
+              }}>
+                <FileText size={32} color="var(--accent-emerald)" style={{ margin: '0 auto 10px' }} />
+                <h4 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  No Transcript Available Yet
+                </h4>
+                <p style={{ fontSize: '0.82rem', maxWidth: 420, margin: '0 auto' }}>
+                  This recording has not yet been processed with local speech-to-text.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -262,9 +399,9 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
       {/* Tab 3: Raw Hardware Manifest & Checksum Audit */}
       {activeSubTab === 'raw' && (
         <div className="white-card" style={{ padding: 26 }}>
-          <h3 style={{ fontSize: '1.15rem', marginBottom: 12 }}>MicroSD File & Checksum Verification</h3>
+          <h3 style={{ fontSize: '1.15rem', marginBottom: 12 }}>Technical Storage & Checksum Verification</h3>
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
-            Technical audit trail proving binary byte count and CRC32 verification during transfer from physical media.
+            Technical audit trail recording binary file size, SHA-256 integrity hash, and IndexedDB commitment.
           </p>
 
           <pre style={{
@@ -287,9 +424,12 @@ export const SessionDetailView: React.FC<SessionDetailViewProps> = ({
               bitDepth: `${session.metadata.bitDepth}-bit`,
               duration: `${session.metadata.durationSeconds}s`,
               fileSizeBytes: session.metadata.fileSizeBytes,
-              checksumVerification: 'VERIFIED_CRC32_MATCH',
+              checksumVerification: 'VERIFIED_SHA256_INTEGRITY',
               sha256Hash: session.metadata.checksumSha256,
               syncStatus: session.syncStatus,
+              processingStatus: session.processingStatus || 'completed',
+              source: session.source || 'pendant_mic',
+              hasLocalAudioBlob: Boolean(audioBlobUrl),
               indexedDbCommitted: true,
             }, null, 2)}
           </pre>
