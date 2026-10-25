@@ -51,10 +51,11 @@ MAX_AUDIO_MB        = int(os.environ.get("MAX_AUDIO_MB",  "100"))
 # Maximum characters per chunk sent to the LLM. Keeping at 6 000 gives ~1 500 tokens
 # of breathing room before typical 8K-context models truncate further.
 CHUNK_CHAR_LIMIT    = int(os.environ.get("CHUNK_CHAR_LIMIT", "6000"))
+ALLOWED_ORIGINS_ENV = os.environ.get("ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS     = [
     "http://localhost:5173", "http://127.0.0.1:5173",
     "http://localhost:4173", "http://127.0.0.1:4173",
-]
+] + [o.strip() for o in ALLOWED_ORIGINS_ENV.split(",") if o.strip()]
 
 # ─── PyAV compatibility shim for PyAV >= 14 ──────────────────────────────────
 try:
@@ -184,6 +185,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

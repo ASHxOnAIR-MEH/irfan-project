@@ -7,7 +7,9 @@
  * All data stays local. No cloud APIs are used.
  */
 
-export const BACKEND_BASE_URL = 'http://127.0.0.1:8787';
+export const BACKEND_BASE_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) ||
+  'http://127.0.0.1:8787';
 
 // ─── Response Type Definitions ────────────────────────────────────────────────
 
