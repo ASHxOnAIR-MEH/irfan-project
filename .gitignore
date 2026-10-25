@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache
+.pytest_cache/
+.venv/
+backend/.venv/
+
+# Test audio recordings and local env
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.opus
+.env
+.env.*
+!.env.example

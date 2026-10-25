@@ -12,7 +12,8 @@ import {
   Tag,
   ShieldCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { AIAnalysis, ActionItem } from '../../types/session';
 
@@ -51,8 +52,48 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const isFallback = insights.provider === 'transcript_fallback' || !!insights.summarizationFailed;
+
+  const getProviderBadge = () => {
+    if (insights.provider === 'ollama_local') {
+      return { label: 'Local Ollama LLM', bg: 'badge-emerald' };
+    }
+    if (isFallback) {
+      return { label: 'Transcript Fallback (No AI Summary)', bg: 'badge-amber' };
+    }
+    if (insights.provider === 'webllm_local') {
+      return { label: 'In-Browser WebLLM', bg: 'badge-emerald' };
+    }
+    if (insights.isDemonstrationData || insights.provider === 'local_mock') {
+      return { label: 'Simulated Offline Model', bg: 'badge-secondary' };
+    }
+    return { label: 'Local Pipeline', bg: 'badge-emerald' };
+  };
+
+  const providerBadge = getProviderBadge();
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Fallback Warning if Ollama was unavailable */}
+      {isFallback && (
+        <div style={{
+          background: '#fffbeb',
+          border: '1.5px solid #fde68a',
+          borderRadius: '14px',
+          padding: '12px 18px',
+          fontSize: '0.84rem',
+          color: '#92400e',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <AlertTriangle size={18} style={{ flexShrink: 0, color: '#f59e0b' }} />
+          <span>
+            <strong>Transcript-only fallback:</strong> Ollama was unavailable when this recording was analyzed. The overview below is derived from transcript text and is not an AI-generated summary.
+          </span>
+        </div>
+      )}
+
       {/* Provenance & Privacy Disclosure Banner */}
       <div style={{
         display: 'flex',
@@ -60,19 +101,19 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: 10,
-        background: '#ecfdf5',
-        border: '1.5px solid #a7f3d0',
+        background: isFallback ? '#fffbeb' : '#ecfdf5',
+        border: `1.5px solid ${isFallback ? '#fde68a' : '#a7f3d0'}`,
         borderRadius: '14px',
         padding: '10px 18px',
         fontSize: '0.8rem',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ShieldCheck size={16} color="var(--accent-emerald)" />
+          <ShieldCheck size={16} color={isFallback ? '#f59e0b' : 'var(--accent-emerald)'} />
           <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
             Processing Pipeline:
           </span>
-          <span className="badge badge-emerald" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-            {insights.isDemonstrationData ? 'Simulated Offline Model' : 'Client-Side Transformers'}
+          <span className={`badge ${providerBadge.bg}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+            {providerBadge.label}
           </span>
         </div>
 
@@ -84,8 +125,10 @@ export const InsightsView: React.FC<InsightsViewProps> = ({
       {/* 1. Executive Summary Card */}
       <div className="white-card" style={{ padding: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Sparkles size={20} color="var(--accent-emerald)" />
-          <h3 style={{ fontSize: '1.15rem' }}>Executive Summary</h3>
+          <Sparkles size={20} color={isFallback ? '#f59e0b' : 'var(--accent-emerald)'} />
+          <h3 style={{ fontSize: '1.15rem' }}>
+            {isFallback ? 'Transcript Overview (No AI Summary)' : 'Executive Summary'}
+          </h3>
         </div>
         <p style={{ fontSize: '0.94rem', lineHeight: 1.7, color: 'var(--text-primary)' }}>
           {insights.executiveSummary}

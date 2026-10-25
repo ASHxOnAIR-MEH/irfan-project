@@ -12,8 +12,7 @@ import {
   ShieldCheck, 
   Sparkles, 
   Volume2,
-  Brain,
-  Upload
+  Brain
 } from 'lucide-react';
 import { PendantDeviceStatus } from '../../types/device';
 import { SyncManifestItem } from '../../types/protocol';

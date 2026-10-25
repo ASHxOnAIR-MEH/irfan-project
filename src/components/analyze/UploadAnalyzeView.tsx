@@ -6,8 +6,9 @@
  *   2. Validate format / probe audio
  *   3. Upload to local AI backend (Faster-Whisper)
  *   4. Transcribe → summarize (Ollama)
- *   5. Save session to IndexedDB
- *   6. View results or retry summarization
+ *   5. Save session & original audio to IndexedDB
+ *   6. Distinct handling for successful transcription with failed summarization
+ *   7. Retry summarization without re-uploading audio
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -28,6 +29,8 @@ import {
   Cpu,
   Clock,
   ExternalLink,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 import { RecordingSession } from '../../types/session';
 import { probeAudioFile, createImportedSession, AudioValidationError } from '../../services/audio/audioFileService';
@@ -36,6 +39,7 @@ import {
   analyzeAudioFile,
   retrySummarization,
   mapBackendResponseToSession,
+  mapRetryResponseToInsights,
   BackendApiError,
   HealthResponse,
 } from '../../services/ai/backendApiService';
@@ -53,6 +57,7 @@ type Step =
   | 'summarizing'
   | 'saving'
   | 'completed'
+  | 'summary_failed'
   | 'failed';
 
 interface AnalyzeViewProps {
@@ -102,6 +107,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryErrorMessage, setRetryErrorMessage] = useState<string | null>(null);
   const [completedSession, setCompletedSession] = useState<RecordingSession | null>(null);
   const [savedTranscriptText, setSavedTranscriptText] = useState<string | null>(null);
   const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
@@ -109,6 +115,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
   const [whisperModel, setWhisperModel] = useState<string>('');
   const [ollamaModel, setOllamaModel] = useState<string>('');
   const [isRetrying, setIsRetrying] = useState(false);
+  const [charsProcessed, setCharsProcessed] = useState<number | null>(null);
 
   const isProcessing = ['checking_backend', 'validating', 'uploading', 'transcribing', 'summarizing', 'saving'].includes(step);
 
@@ -137,10 +144,12 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
 
     setSelectedFile(file);
     setErrorMessage(null);
+    setRetryErrorMessage(null);
     setCompletedSession(null);
     setSavedTranscriptText(null);
     setSavedSessionId(null);
     setTimings({});
+    setCharsProcessed(null);
     setUploadProgress(0);
 
     // Check backend before proceeding
@@ -156,6 +165,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
 
     abortRef.current = new AbortController();
     setErrorMessage(null);
+    setRetryErrorMessage(null);
     setUploadProgress(0);
 
     try {
@@ -203,25 +213,33 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
       });
       setWhisperModel(analysisResult.whisper_model);
       setOllamaModel(analysisResult.ollama_model);
+      setCharsProcessed(analysisResult.transcript_chars_processed);
 
       // Step 3: Map backend response → frontend session model
       setStep('summarizing');
-      const { transcript, insights } = mapBackendResponseToSession(analysisResult);
+      const { transcript, insights, summarizationFailed } = mapBackendResponseToSession(analysisResult);
 
-      // Step 4: Merge into session and persist
+      // Step 4: Merge into session and persist audio + transcript
       setStep('saving');
       const finalSession: RecordingSession = {
         ...draftSession,
         transcript,
         insights,
-        processingStatus: 'completed',
+        // If summarization failed, mark status as awaiting_analysis so user knows summary is pending
+        processingStatus: summarizationFailed ? 'awaiting_analysis' : 'completed',
       };
 
       await localDb.saveSessionWithAudio(finalSession, selectedFile);
-
       setCompletedSession(finalSession);
-      setStep('completed');
-      onSessionReady(finalSession);
+
+      // Separate success vs summary failure:
+      // If transcription succeeded but summarization failed, transition to summary_failed state.
+      if (summarizationFailed) {
+        setStep('summary_failed');
+      } else {
+        setStep('completed');
+        onSessionReady(finalSession);
+      }
 
     } catch (err) {
       const msg = err instanceof BackendApiError
@@ -234,40 +252,35 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
     }
   }, [selectedFile, onSessionReady]);
 
-  // ── Retry summarization only ───────────────────────────────────────────────
+  // ── Retry summarization only (uses saved transcript without re-uploading audio) ──
   const handleRetrySummarization = useCallback(async () => {
     if (!savedTranscriptText || !savedSessionId) return;
     setIsRetrying(true);
-    setErrorMessage(null);
+    setRetryErrorMessage(null);
 
     try {
-      const newInsightsRaw = await retrySummarization(savedTranscriptText, savedSessionId);
+      const retryResp = await retrySummarization(savedTranscriptText, savedSessionId);
 
       // Fetch existing session from DB to merge
       const existing = await localDb.getSession(savedSessionId);
       if (!existing) throw new Error('Session not found in local storage.');
 
-      // Map retry insights to frontend model
-      const mapped = mapBackendResponseToSession({
-        session_id: savedSessionId,
-        transcript_segments: [],
-        full_text: savedTranscriptText,
-        language: 'unknown',
-        insights: newInsightsRaw,
-        transcription_duration_ms: 0,
-        summarization_duration_ms: 0,
-        whisper_model: whisperModel,
-        ollama_model: ollamaModel,
-      });
+      // Map retry response to insights
+      const updatedInsights = mapRetryResponseToInsights(
+        retryResp,
+        timings.transcription || existing.insights?.processingDurationMs || 0
+      );
 
       const updated: RecordingSession = {
         ...existing,
-        insights: mapped.insights,
+        insights: updatedInsights,
         processingStatus: 'completed',
       };
 
       await localDb.saveSession(updated);
       setCompletedSession(updated);
+      setCharsProcessed(retryResp.transcript_chars_processed);
+      setStep('completed');
       onSessionReady(updated);
 
     } catch (err) {
@@ -276,17 +289,18 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
         : err instanceof Error
         ? err.message
         : 'Retry failed.';
-      setErrorMessage(msg);
+      setRetryErrorMessage(msg);
     } finally {
       setIsRetrying(false);
     }
-  }, [savedTranscriptText, savedSessionId, whisperModel, ollamaModel, onSessionReady]);
+  }, [savedTranscriptText, savedSessionId, timings.transcription, onSessionReady]);
 
   const handleCancel = () => {
     abortRef.current?.abort();
     setStep('idle');
     setSelectedFile(null);
     setErrorMessage(null);
+    setRetryErrorMessage(null);
     setUploadProgress(0);
   };
 
@@ -294,11 +308,13 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
     setStep('idle');
     setSelectedFile(null);
     setErrorMessage(null);
+    setRetryErrorMessage(null);
     setCompletedSession(null);
     setSavedTranscriptText(null);
     setSavedSessionId(null);
     setUploadProgress(0);
     setTimings({});
+    setCharsProcessed(null);
   };
 
   const currentStepIdx = stepIndex(step);
@@ -348,7 +364,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
               background: health.ollama_reachable ? 'var(--accent-emerald)' : '#f59e0b',
               boxShadow: health.ollama_reachable ? '0 0 8px rgba(52,211,153,0.6)' : undefined,
             }} />
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>Backend</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>Backend Status</span>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -363,7 +379,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
             </span>
             {!health.ollama_reachable && (
               <span style={{ color: '#b45309', fontStyle: 'italic' }}>
-                Summarization unavailable — transcription only
+                Ollama offline: transcription will work, but summarization will be pending
               </span>
             )}
           </div>
@@ -379,7 +395,6 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
             e.preventDefault();
             const file = e.dataTransfer.files[0];
             if (file) {
-              // Simulate file input change
               const dt = new DataTransfer();
               dt.items.add(file);
               if (fileInputRef.current) {
@@ -471,8 +486,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
             }}>
               <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
               <span>
-                <strong>Ollama not detected.</strong> Transcription will still run, but AI insight generation will be skipped.
-                Start Ollama and run <code>ollama pull llama3.2</code> for full analysis.
+                <strong>Ollama not detected.</strong> Transcription will succeed and save to your library, but AI insight generation will be marked pending. You can retry summarization later when Ollama is active.
               </span>
             </div>
           )}
@@ -565,7 +579,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
               <Loader2 size={16} color="var(--accent-emerald)" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
               {step === 'validating'   && 'Validating audio format and decoding…'}
               {step === 'uploading'    && 'Uploading audio to local backend…'}
-              {step === 'transcribing' && 'Faster-Whisper is transcribing speech — this may take a minute…'}
+              {step === 'transcribing' && 'Faster-Whisper is transcribing speech — this may take a moment…'}
               {step === 'summarizing'  && 'Ollama is generating structured insights…'}
               {step === 'saving'       && 'Saving session to IndexedDB…'}
             </div>
@@ -576,7 +590,178 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
         </div>
       )}
 
-      {/* ── Completed ── */}
+      {/* ── Summary Failed / Partial Success (Transcription OK, Ollama Unavailable) ── */}
+      {step === 'summary_failed' && completedSession && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Header Banner: Distinct status indicators */}
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+            borderRadius: 20,
+            padding: '26px 30px',
+            color: '#fff',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: 'rgba(245, 158, 11, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <AlertTriangle size={24} color="#f59e0b" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: 4 }}>
+                  Transcription Complete · AI Summary Pending
+                </h3>
+                <p style={{ fontSize: '0.86rem', opacity: 0.85, lineHeight: 1.5 }}>
+                  {completedSession.title}
+                </p>
+              </div>
+            </div>
+
+            {/* Separate Status Badges */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginTop: 12 }}>
+              {/* Transcription Status */}
+              <div style={{
+                background: 'rgba(52, 211, 153, 0.1)',
+                border: '1px solid rgba(52, 211, 153, 0.3)',
+                borderRadius: 12,
+                padding: '12px 14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.84rem', color: '#34d399', marginBottom: 4 }}>
+                  <CheckCircle2 size={15} /> Speech Transcription: Succeeded
+                </div>
+                <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>
+                  {timings.transcription !== undefined && `Duration: ${formatMs(timings.transcription)} · `}
+                  {completedSession.transcript.length} segments ({savedTranscriptText ? savedTranscriptText.split(/\s+/).length : 0} words)
+                </div>
+              </div>
+
+              {/* Summarization Status */}
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: 12,
+                padding: '12px 14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.84rem', color: '#fbbf24', marginBottom: 4 }}>
+                  <AlertCircle size={15} /> AI Summarization: Unavailable
+                </div>
+                <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>
+                  Ollama was not reachable or returned no valid summary.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Card: Safe Persistence & Retry Summarization */}
+          <div className="white-card" style={{ padding: 24 }}>
+            <div style={{
+              background: '#f0fdf4',
+              border: '1.5px solid #bbf7d0',
+              borderRadius: 12,
+              padding: '14px 18px',
+              marginBottom: 20,
+              fontSize: '0.85rem',
+              color: '#166534',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+            }}>
+              <CheckCircle2 size={18} style={{ flexShrink: 0, marginTop: 2, color: '#16a34a' }} />
+              <div>
+                <strong>Audio and transcript are safely saved.</strong>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#15803d', lineHeight: 1.5 }}>
+                  Both the raw audio file and the word-level transcript have been saved to local IndexedDB. You can retry AI summarization now or anytime later without re-uploading the audio file.
+                </p>
+              </div>
+            </div>
+
+            {/* Retry Error Alert if retry failed */}
+            {retryErrorMessage && (
+              <div style={{
+                background: '#fff1f2',
+                border: '1.5px solid #fecdd3',
+                borderRadius: 12,
+                padding: '12px 16px',
+                fontSize: '0.82rem',
+                color: '#9f1239',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                marginBottom: 18,
+              }}>
+                <XCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>{retryErrorMessage}</span>
+              </div>
+            )}
+
+            {/* Transcript Preview */}
+            {completedSession.transcript.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+                  <FileText size={15} color="var(--accent-forest)" /> Transcribed Text Preview
+                </div>
+                <div style={{
+                  background: '#f8fdf9',
+                  border: '1.5px solid var(--border-card)',
+                  borderRadius: 12,
+                  padding: '14px 18px',
+                  fontSize: '0.85rem',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                  maxHeight: 160,
+                  overflowY: 'auto',
+                }}>
+                  {savedTranscriptText || completedSession.transcript.map((s) => s.text).join(' ')}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={handleRetrySummarization}
+                disabled={isRetrying}
+                className="btn btn-forest"
+                style={{ padding: '10px 24px', fontSize: '0.88rem', flex: 1, minWidth: 200 }}
+              >
+                {isRetrying ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    Generating AI Summary with Ollama…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Retry Summarization (Using Saved Transcript)
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => onSessionReady(completedSession)}
+                className="btn btn-secondary"
+                style={{ padding: '10px 20px', fontSize: '0.88rem' }}
+              >
+                <ExternalLink size={15} /> Open Session in Library
+              </button>
+              <button
+                onClick={handleReset}
+                className="btn btn-secondary"
+                style={{ padding: '10px 18px', fontSize: '0.88rem' }}
+              >
+                <Upload size={14} /> Analyze Another
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Fully Completed (Both Transcription and Real AI Summary Succeeded) ── */}
       {step === 'completed' && completedSession && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Success Banner */}
@@ -603,8 +788,8 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
               <CheckCircle2 size={28} color="#34d399" />
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 900, marginBottom: 6 }}>
-                Analysis Complete
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: 6 }}>
+                AI Analysis Complete
               </h3>
               <p style={{ fontSize: '0.84rem', opacity: 0.8, marginBottom: 16, lineHeight: 1.5 }}>
                 {completedSession.title}
@@ -625,15 +810,27 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
                     <Server size={13} /> Whisper {whisperModel} · Ollama {ollamaModel}
                   </span>
                 )}
+                {charsProcessed !== null && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <FileText size={13} /> {charsProcessed.toLocaleString()} characters analyzed
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           {/* Result Summary */}
           <div className="white-card" style={{ padding: 24 }}>
-            <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 12 }}>
-              AI Summary
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+              <h4 style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={16} color="var(--accent-emerald)" />
+                AI Summary (Ollama {ollamaModel})
+              </h4>
+              <span className="badge badge-emerald" style={{ fontSize: '0.72rem' }}>
+                Genuine Local LLM
+              </span>
+            </div>
+
             <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16 }}>
               {completedSession.insights.executiveSummary}
             </p>
@@ -712,7 +909,7 @@ export const UploadAnalyzeView: React.FC<AnalyzeViewProps> = ({ onSessionReady }
             {errorMessage}
           </p>
 
-          {/* Show retry summarization option if transcription succeeded */}
+          {/* Show retry summarization option if transcription succeeded before failure */}
           {savedTranscriptText && (
             <div style={{
               background: '#fffbeb',

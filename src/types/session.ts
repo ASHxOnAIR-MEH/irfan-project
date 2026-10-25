@@ -52,7 +52,18 @@ export interface StudyQuestion {
 }
 
 export interface AIAnalysis {
-  provider: 'local_mock' | 'cloud_gemini' | 'cloud_whisper' | 'webllm_local';
+  /**
+   * Provider values:
+   *   local_mock        – seeded demo data, never real audio
+   *   cloud_gemini      – Gemini cloud API (not yet implemented)
+   *   cloud_whisper     – OpenAI Whisper cloud API (not yet implemented)
+   *   webllm_local      – reserved for future in-browser WebLLM
+   *   ollama_local      – real Ollama LLM successfully generated this summary
+   *   transcript_fallback – Ollama was unavailable; summary is derived from
+   *                         transcript text only, NOT an LLM summary
+   */
+  provider: 'local_mock' | 'cloud_gemini' | 'cloud_whisper' | 'webllm_local'
+          | 'ollama_local' | 'transcript_fallback';
   isDemonstrationData: boolean;
   analyzedAtMs: number;
   executiveSummary: string;
@@ -63,6 +74,10 @@ export interface AIAnalysis {
   studyQuestions: StudyQuestion[];
   sentiment?: 'reflective' | 'action_oriented' | 'analytical' | 'neutral' | 'urgent';
   processingDurationMs?: number;
+  /** True when transcription succeeded but LLM summarization did not run or failed. */
+  summarizationFailed?: boolean;
+  /** Number of transcript characters sent to the LLM (may be less than full_text if truncated). */
+  transcriptCharsSent?: number;
 }
 
 export type SyncStatus = 'pendant_only' | 'syncing' | 'synced_local' | 'sync_failed';

@@ -55,11 +55,22 @@ export interface BackendAIInsights {
   sentiment: 'reflective' | 'action_oriented' | 'analytical' | 'neutral' | 'urgent' | string;
 }
 
+/**
+ * "ollama_local"        – Ollama ran successfully and returned a parseable summary.
+ * "transcript_fallback" – Ollama was unavailable or failed; summary is NOT AI-generated.
+ */
+export type SummarizationProvider = 'ollama_local' | 'transcript_fallback';
+
 export interface AnalyzeAudioResponse {
   session_id: string;
   transcript_segments: BackendTranscriptSegment[];
   full_text: string;
   language: string;
+  /** Whether Ollama successfully generated a real AI summary. */
+  summarization_provider: SummarizationProvider;
+  summarization_succeeded: boolean;
+  /** Characters actually sent to the LLM (equals full_text length when no truncation). */
+  transcript_chars_processed: number;
   insights: BackendAIInsights;
   transcription_duration_ms: number;
   summarization_duration_ms: number;
@@ -75,9 +86,16 @@ export interface HealthResponse {
   ollama_reachable: boolean;
   ollama_model_available: boolean;
   available_ollama_models: string[];
+  chunk_char_limit: number;
 }
 
-export interface RetrySummarizationResponse extends BackendAIInsights {}
+/** Successful retry response — always represents a real Ollama summary. */
+export interface RetrySummarizationResponse {
+  insights: BackendAIInsights;
+  summarization_provider: SummarizationProvider;
+  summarization_succeeded: boolean;
+  transcript_chars_processed: number;
+}
 
 // ─── Error Class ──────────────────────────────────────────────────────────────
 
@@ -106,7 +124,7 @@ export async function checkBackendHealth(): Promise<HealthResponse> {
       method: 'GET',
       signal: AbortSignal.timeout(8000),
     });
-  } catch (err) {
+  } catch {
     throw new BackendApiError(
       0,
       'Cannot reach the local AI backend at ' + BACKEND_BASE_URL +
@@ -124,7 +142,8 @@ export async function checkBackendHealth(): Promise<HealthResponse> {
 
 /**
  * Uploads an audio file to the backend for transcription and summarization.
- * Returns the full analysis result including transcript segments and AI insights.
+ * Returns the full analysis result including transcript segments, AI insights,
+ * and an explicit `summarization_succeeded` flag.
  *
  * @param file        - Audio file to upload
  * @param sessionId   - Optional existing session ID to tag the result with
@@ -149,7 +168,7 @@ export async function analyzeAudioFile(
     const xhr = new XMLHttpRequest();
 
     xhr.open('POST', `${BACKEND_BASE_URL}/api/analyze-audio`);
-    xhr.timeout = 10 * 60 * 1000; // 10 minutes for large files
+    xhr.timeout = 12 * 60 * 1000; // 12 minutes for large files + long transcription
 
     if (signal) {
       signal.addEventListener('abort', () => {
@@ -160,7 +179,7 @@ export async function analyzeAudioFile(
 
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable && onProgress) {
-        // Upload progress covers 0–30%, the rest is processing time
+        // Upload progress covers 0–30%; processing (transcription + summarization) is the rest.
         onProgress(Math.min(0.3, (e.loaded / e.total) * 0.3));
       }
     });
@@ -188,7 +207,7 @@ export async function analyzeAudioFile(
     });
 
     xhr.addEventListener('timeout', () => {
-      reject(new BackendApiError(0, 'Request to local AI backend timed out after 10 minutes.'));
+      reject(new BackendApiError(0, 'Request to local AI backend timed out after 12 minutes.'));
     });
 
     xhr.send(formData);
@@ -197,7 +216,9 @@ export async function analyzeAudioFile(
 
 /**
  * Re-runs only the summarization step for an existing transcript.
- * Useful when transcription succeeded but Ollama was unavailable.
+ * The backend returns HTTP 503 if Ollama is not available, so this function
+ * throws BackendApiError rather than silently returning a fallback.
+ * The caller can display the error and keep a Retry button active.
  */
 export async function retrySummarization(
   fullText: string,
@@ -209,11 +230,11 @@ export async function retrySummarization(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ full_text: fullText, session_id: sessionId }),
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(180_000), // 3 minutes — long transcripts need time
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new BackendApiError(0, 'Summarization request timed out.');
+      throw new BackendApiError(0, 'Summarization request timed out after 3 minutes.');
     }
     throw new BackendApiError(0, 'Cannot reach the local AI backend.');
   }
@@ -242,21 +263,82 @@ import type {
 } from '../../types/session';
 
 /**
- * Converts a backend AnalyzeAudioResponse into the frontend session data models.
+ * Maps a BackendAIInsights object + metadata into the frontend AIAnalysis model.
+ * Uses summarization_provider to set the correct provider string so the UI
+ * can accurately label whether output is an Ollama summary or a fallback.
+ */
+function _mapInsights(
+  insights: BackendAIInsights,
+  summarizationProvider: SummarizationProvider,
+  summarizationFailed: boolean,
+  transcriptCharsSent: number,
+  transcriptionMs: number,
+  summarizationMs: number,
+): AIAnalysis {
+  const keyConcepts: KeyConcept[] = insights.key_concepts.map((kc) => ({
+    term: kc.term,
+    explanation: kc.explanation,
+  }));
+
+  const actionItems: ActionItem[] = insights.action_items.map((ai) => ({
+    id: ai.id,
+    description: ai.description,
+    completed: ai.completed,
+    dueSuggestion: ai.due_suggestion ?? undefined,
+    sourceTimestampMs: ai.source_timestamp_ms ?? undefined,
+  }));
+
+  const studyQuestions: StudyQuestion[] = insights.study_questions.map((sq) => ({
+    id: sq.id,
+    question: sq.question,
+    answerSummary: sq.answer_summary,
+  }));
+
+  const validSentiments = ['reflective', 'action_oriented', 'analytical', 'neutral', 'urgent'] as const;
+  type Sentiment = (typeof validSentiments)[number];
+  const sentiment: Sentiment = validSentiments.includes(insights.sentiment as Sentiment)
+    ? (insights.sentiment as Sentiment)
+    : 'neutral';
+
+  return {
+    // Map backend provider string to the session.ts AIAnalysis.provider type.
+    // 'ollama_local' and 'transcript_fallback' are both now in the union type.
+    provider: summarizationProvider === 'ollama_local' ? 'ollama_local' : 'transcript_fallback',
+    isDemonstrationData: false,
+    analyzedAtMs: Date.now(),
+    executiveSummary: insights.executive_summary,
+    importantTopics: insights.important_topics,
+    keyConcepts,
+    thingsToRemember: insights.things_to_remember,
+    actionItems,
+    studyQuestions,
+    sentiment,
+    processingDurationMs: transcriptionMs + summarizationMs,
+    summarizationFailed,
+    transcriptCharsSent,
+  };
+}
+
+/**
+ * Converts a full AnalyzeAudioResponse into frontend session data models.
+ * Also returns `summarizationFailed` so the caller knows whether to show
+ * the retry UI.
  */
 export function mapBackendResponseToSession(resp: AnalyzeAudioResponse): {
   transcript: TranscriptSegment[];
   insights: AIAnalysis;
+  summarizationFailed: boolean;
 } {
   const transcript: TranscriptSegment[] = resp.transcript_segments.map((seg) => {
-    const words: TranscriptWord[] | undefined = seg.words.length > 0
-      ? seg.words.map((w) => ({
-          word: w.word,
-          startMs: w.start_ms,
-          endMs: w.end_ms,
-          confidence: w.confidence ?? undefined,
-        }))
-      : undefined;
+    const words: TranscriptWord[] | undefined =
+      seg.words.length > 0
+        ? seg.words.map((w) => ({
+            word: w.word,
+            startMs: w.start_ms,
+            endMs: w.end_ms,
+            confidence: w.confidence ?? undefined,
+          }))
+        : undefined;
 
     return {
       id: seg.id,
@@ -267,46 +349,34 @@ export function mapBackendResponseToSession(resp: AnalyzeAudioResponse): {
     };
   });
 
-  const keyConcepts: KeyConcept[] = resp.insights.key_concepts.map((kc) => ({
-    term: kc.term,
-    explanation: kc.explanation,
-  }));
+  const summarizationFailed = !resp.summarization_succeeded;
 
-  const actionItems: ActionItem[] = resp.insights.action_items.map((ai) => ({
-    id: ai.id,
-    description: ai.description,
-    completed: ai.completed,
-    dueSuggestion: ai.due_suggestion ?? undefined,
-    sourceTimestampMs: ai.source_timestamp_ms ?? undefined,
-  }));
+  const insights = _mapInsights(
+    resp.insights,
+    resp.summarization_provider,
+    summarizationFailed,
+    resp.transcript_chars_processed,
+    resp.transcription_duration_ms,
+    resp.summarization_duration_ms,
+  );
 
-  const studyQuestions: StudyQuestion[] = resp.insights.study_questions.map((sq) => ({
-    id: sq.id,
-    question: sq.question,
-    answerSummary: sq.answer_summary,
-  }));
+  return { transcript, insights, summarizationFailed };
+}
 
-  const validSentiments = ['reflective', 'action_oriented', 'analytical', 'neutral', 'urgent'] as const;
-  type Sentiment = (typeof validSentiments)[number];
-  const sentiment: Sentiment = validSentiments.includes(resp.insights.sentiment as Sentiment)
-    ? (resp.insights.sentiment as Sentiment)
-    : 'neutral';
-
-  const totalProcessingMs = resp.transcription_duration_ms + resp.summarization_duration_ms;
-
-  const insights: AIAnalysis = {
-    provider: 'webllm_local',
-    isDemonstrationData: false,
-    analyzedAtMs: Date.now(),
-    executiveSummary: resp.insights.executive_summary,
-    importantTopics: resp.insights.important_topics,
-    keyConcepts,
-    thingsToRemember: resp.insights.things_to_remember,
-    actionItems,
-    studyQuestions,
-    sentiment,
-    processingDurationMs: totalProcessingMs,
-  };
-
-  return { transcript, insights };
+/**
+ * Maps a successful RetrySummarizationResponse into an AIAnalysis update.
+ * Only call this when the retry actually succeeded (HTTP 200 + provider = ollama_local).
+ */
+export function mapRetryResponseToInsights(
+  resp: RetrySummarizationResponse,
+  existingTranscriptionMs = 0,
+): AIAnalysis {
+  return _mapInsights(
+    resp.insights,
+    resp.summarization_provider,
+    false,
+    resp.transcript_chars_processed,
+    existingTranscriptionMs,
+    0,
+  );
 }

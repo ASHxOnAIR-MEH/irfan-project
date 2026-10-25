@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "npx -y vite-node scripts/test_stage2.mjs",
+    "test": "npx -y vite-node scripts/test_stage2.mjs && npx -y vite-node scripts/test_stage3.mjs",
+    "test:stage2": "npx -y vite-node scripts/test_stage2.mjs",
+    "test:stage3": "npx -y vite-node scripts/test_stage3.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
